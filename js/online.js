@@ -10,6 +10,7 @@ let serverOffset = 0;
 let readyPromise = null;
 let currentUser = null;
 let profileCache = null;
+let bannedFlag = false;
 const userListeners = new Set();
 
 export function isConfigured(){ return EMU || !!firebaseConfig; }
@@ -34,9 +35,14 @@ export async function init(){
     await new Promise(res => {
       let first = true;
       F.onAuthStateChanged(auth, async u => {
+        if (u && u.isAnonymous){ try { await F.signOut(auth); } catch(_){} u = null; }   // guest accounts were removed
         currentUser = u;
         profileCache = null;
-        if (u){ try { profileCache = await ensureProfile(u); } catch(e){ console.error(e); } }
+        bannedFlag = false;
+        if (u){
+          try { profileCache = await ensureProfile(u); } catch(e){ console.error(e); }
+          try { bannedFlag = (await F.get(R(`banned/${u.uid}`))).exists(); } catch(_){}
+        }
         userListeners.forEach(fn => fn(u, profileCache));
         if (first){ first = false; res(); }
       });
@@ -49,6 +55,7 @@ export async function init(){
 export const now = () => Date.now() + serverOffset;
 export const user = () => currentUser;
 export const profile = () => profileCache;
+export const isBanned = () => bannedFlag;
 export function onUser(fn){ userListeners.add(fn); return () => userListeners.delete(fn); }
 
 const R = p => F.ref(db, p);
@@ -65,9 +72,9 @@ async function ensureProfile(u){
     return p;
   }
   const p = {
-    name: cleanName(u.displayName) || (u.isAnonymous ? 'Guest' : (u.email || 'Player').split('@')[0]).slice(0, 20),
+    name: cleanName(u.displayName) || cleanName((u.email || 'Player').split('@')[0]) || 'Player',
     rating: 1200, games: 0, wins: 0, losses: 0, draws: 0,
-    guest: !!u.isAnonymous, created: F.serverTimestamp()
+    created: F.serverTimestamp()
   };
   await F.set(R(`users/${u.uid}`), p);
   p.created = now();
@@ -88,30 +95,22 @@ export async function signUp(name, email, pass){
   await init();
   const cred = await F.createUserWithEmailAndPassword(auth, email.trim(), pass);
   await F.updateProfile(cred.user, { displayName: cleanName(name) });
-  await F.set(R(`users/${cred.user.uid}`), { name: cleanName(name), rating: 1200, games: 0, wins: 0, losses: 0, draws: 0, guest: false, nameSet: true, created: F.serverTimestamp() });
+  await F.set(R(`users/${cred.user.uid}`), { name: cleanName(name), rating: 1200, games: 0, wins: 0, losses: 0, draws: 0, nameSet: true, created: F.serverTimestamp() });
   return refreshProfile();
 }
 export async function signIn(email, pass){ await init(); await F.signInWithEmailAndPassword(auth, email.trim(), pass); return refreshProfile(); }
-export async function signInGuest(name){
-  await init();
-  const cred = await F.signInAnonymously(auth);
-  const nm = cleanName(name) || 'Guest' + Math.floor(1000 + Math.random() * 9000);
-  await F.updateProfile(cred.user, { displayName: nm });
-  await F.update(R(`users/${cred.user.uid}`), { name: nm, guest: true, nameSet: true });
-  return refreshProfile();
-}
 export async function signInGoogle(){
   await init();
   const provider = new F.GoogleAuthProvider();
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  if (standalone) return F.signInWithRedirect(auth, provider);
-  await F.signInWithPopup(auth, provider);
-  return refreshProfile();
-}
-export async function upgradeGuest(email, pass){
-  const credential = F.EmailAuthProvider.credential(email.trim(), pass);
-  await F.linkWithCredential(currentUser, credential);
-  await F.update(R(`users/${currentUser.uid}`), { guest: false });
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    await F.signInWithPopup(auth, provider);
+  } catch(e){
+    // popups can be blocked (some in-app browsers / home-screen apps): fall back to a full-page redirect
+    const c = e && e.code;
+    if (c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-this-environment' || c === 'auth/web-storage-unsupported') return F.signInWithRedirect(auth, provider);
+    throw e;
+  }
   return refreshProfile();
 }
 export async function resetPassword(email){ await init(); return F.sendPasswordResetEmail(auth, email.trim()); }
@@ -146,7 +145,12 @@ export function authErrorText(e){
     'auth/unauthorized-domain': 'This website isn’t authorised for Google sign-in yet (add it in Firebase → Authentication → Settings → Authorised domains).',
     'auth/operation-not-allowed': 'This sign-in method isn’t switched on in Firebase yet.',
     'auth/requires-recent-login': 'For safety, sign out and sign in again, then delete your account.',
-    'auth/credential-already-in-use': 'That email is already used by another account.'
+    'auth/credential-already-in-use': 'That email is already used by another account.',
+    'auth/account-exists-with-different-credential': 'This email already has an account with a password — sign in with email instead.',
+    'auth/cancelled-popup-request': 'Google sign-in was closed.',
+    'auth/internal-error': 'Google sign-in failed. Try again, or use email and password.',
+    'auth/user-disabled': 'This account has been disabled.',
+    'PERMISSION_DENIED': 'Not allowed.'
   };
   return map[c] || (e && e.message) || 'Something went wrong.';
 }
@@ -182,17 +186,28 @@ export function normCode(c){ return (c || '').toUpperCase().replace(/[^A-Z0-9]/g
 
 function me(){ const p = profileCache || {}; return { uid: currentUser.uid, name: p.name || currentUser.displayName || 'Player', rating: p.rating || 1200 }; }
 
+// names and ratings are copied from the live profiles (the database rules check this)
+async function freshPlayer(uid){
+  const p = (await F.get(R(`users/${uid}`))).val() || {};
+  return { uid, name: p.name || 'Player', rating: p.rating || 1200 };
+}
+async function writeGame(gid, w, bl, base){
+  const [W, B] = await Promise.all([freshPlayer(w), freshPlayer(bl)]);
+  const game = Object.assign({}, base, {
+    white: W.uid, black: B.uid, wName: W.name, bName: B.name, wRating: W.rating, bRating: B.rating,
+    turn: base.startFen.split(' ')[1] === 'b' ? 'b' : 'w',
+    clock: { w: base.tc.base, b: base.tc.base }, created: F.serverTimestamp(), lastMoveAt: F.serverTimestamp(),
+    status: 'active', ply: 0
+  });
+  await F.set(R(`games/${gid}`), game);
+}
 async function createGame(gid, a, b, opts){
-  // a, b: {uid,name,rating}; random colours
+  // a, b: {uid,...}; random colours
   const [w, bl] = Math.random() < 0.5 ? [a, b] : [b, a];
   const tc = tcById(opts.tc);
-  const game = {
-    white: w.uid, black: bl.uid, wName: w.name, bName: bl.name, wRating: w.rating, bRating: bl.rating,
-    startFen: opts.startFen, mode: opts.mode, tc: { id: tc.id, base: tc.base, inc: tc.inc },
-    clock: { w: tc.base, b: tc.base }, created: F.serverTimestamp(), lastMoveAt: F.serverTimestamp(),
-    status: 'active', ply: 0
-  };
-  await F.set(R(`games/${gid}`), game);
+  const base = { startFen: opts.startFen, mode: opts.mode, tc: { id: tc.id, base: tc.base, inc: tc.inc } };
+  try { await writeGame(gid, w.uid, bl.uid, base); }
+  catch(e){ await writeGame(gid, w.uid, bl.uid, base); }   // a profile changed in between: read again
   return gid;
 }
 
@@ -315,13 +330,17 @@ export async function joinLobby(code, onGame){
 export function watchGame(gid, cb){ return F.onValue(R(`games/${gid}`), s => cb(s.val())); }
 export async function getGame(gid){ return (await F.get(R(`games/${gid}`))).val(); }
 
+// Replays the game. Stops at the first illegal move and records where (c.illegalAt).
 export function replay(g){
   const c = new Chess(g.startFen);
   const n = g.ply || 0;
   const moves = g.moves || {};
+  c.illegalAt = null;
   for (let i = 0; i < n; i++){
-    const u = moves[i]; if (!u) break;
-    c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+    const u = moves[i];
+    let ok = null;
+    try { ok = u ? c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }) : null; } catch(_){ ok = null; }
+    if (!ok){ c.illegalAt = i; break; }
   }
   return c;
 }
@@ -338,6 +357,7 @@ export function clocks(g, t = now()){
   return c;
 }
 export function sideToMove(g){
+  if (g.turn === 'w' || g.turn === 'b') return g.turn;
   const first = g.startFen.split(' ')[1];
   return (g.ply || 0) % 2 === 0 ? first : other(first);
 }
@@ -357,41 +377,46 @@ function endState(c){
 }
 
 export async function sendMove(gid, ply, uci){
-  const t = now();
+  const uid = currentUser.uid;
   return F.runTransaction(R(`games/${gid}`), g => {
     if (!g) return null;
     if (g.status !== 'active' || (g.ply || 0) !== ply) return;   // abort: stale
+    const t = now();
     const mover = sideToMove(g);
-    if (colorOf(g, currentUser.uid) !== mover) return;
+    if (colorOf(g, uid) !== mover) return;
     g.moves = g.moves || {};
     if ((g.ply || 0) >= 2){
       const left = g.clock[mover] - (t - g.lastMoveAt);
       if (left <= 0){
+        // my own flag fell: I can only record the loss (a draw claim must come from the opponent)
         const c = replay(g);
-        g.status = 'over'; g.result = hasMatingMaterial(c, other(mover)) ? other(mover) : 'd'; g.reason = 'time';
-        g.clock[mover] = 0; g.endedAt = t;
+        if (!hasMatingMaterial(c, other(mover))) return;
+        Object.assign(g, { status: 'over', result: other(mover), reason: 'time', endBy: uid, endedAt: t });
+        g.clock[mover] = 0;
         return g;
       }
-      g.clock[mover] = left + (g.tc.inc || 0);
+      g.clock[mover] = Math.round(left + (g.tc.inc || 0));
     }
     g.moves[g.ply || 0] = uci;
     g.ply = (g.ply || 0) + 1;
+    g.turn = other(mover);
     g.lastMoveAt = t;
     if (g.drawOffer && g.drawOffer !== mover) g.drawOffer = null;
     const c = replay(g);
     const end = endState(c);
-    if (end){ g.status = 'over'; g.result = end.result; g.reason = end.reason; g.endedAt = t; }
+    if (end){ Object.assign(g, { status: 'over', result: end.result, reason: end.reason, endBy: uid, endedAt: t }); }
     return g;
   }, { applyLocally: true });
 }
 
 async function finish(gid, fn){
+  const uid = currentUser.uid;
   return F.runTransaction(R(`games/${gid}`), g => {
     if (!g) return null;
     if (g.status !== 'active') return;
     const r = fn(g);
     if (!r) return;
-    Object.assign(g, r, { endedAt: now() });
+    Object.assign(g, r, { endBy: uid, endedAt: now() });
     return g;
   });
 }
@@ -400,8 +425,8 @@ export const acceptDraw = gid => finish(gid, g => { const c = colorOf(g, current
 export const claimAbandon = gid => finish(gid, g => { const c = colorOf(g, currentUser.uid); return c ? { status: 'over', result: c, reason: 'abandon' } : null; });
 export const abortGame = gid => finish(gid, g => (g.ply || 0) < 2 && colorOf(g, currentUser.uid) ? { status: 'aborted', result: 'x', reason: 'abort' } : null);
 export async function claimTimeout(gid){
-  const t = now();
   return finish(gid, g => {
+    const t = now();
     if ((g.ply || 0) < 2){
       // no first move within 30s → abort
       return (t - g.lastMoveAt > 30000) ? { status: 'aborted', result: 'x', reason: 'nomove' } : null;
@@ -410,9 +435,13 @@ export async function claimTimeout(gid){
     const left = g.clock[turn] - (t - g.lastMoveAt);
     if (left > 0) return null;
     const c = replay(g);
-    return { status: 'over', result: hasMatingMaterial(c, other(turn)) ? other(turn) : 'd', reason: 'time', clock: Object.assign({}, g.clock, { [turn]: 0 }) };
+    const result = hasMatingMaterial(c, other(turn)) ? other(turn) : 'd';
+    if (result === 'd' && colorOf(g, currentUser.uid) === turn) return null;   // only the opponent may record a draw on time
+    return { status: 'over', result, reason: 'time', clock: Object.assign({}, g.clock, { [turn]: 0 }) };
   });
 }
+// opponent made an illegal move (only possible with a modified app): the honest side wins, the game is checked
+export const claimIllegal = gid => finish(gid, g => { const c = colorOf(g, currentUser.uid); return c ? { status: 'over', result: c, reason: 'illegal' } : null; });
 export async function offerDraw(gid){
   return F.runTransaction(R(`games/${gid}`), g => {
     if (!g) return null;
@@ -421,7 +450,13 @@ export async function offerDraw(gid){
     g.drawOffer = c; return g;
   });
 }
-export async function declineDraw(gid){ return F.update(R(`games/${gid}`), { drawOffer: null }); }
+export async function declineDraw(gid){
+  return F.runTransaction(R(`games/${gid}`), g => {
+    if (!g) return null;
+    if (g.status !== 'active' || !g.drawOffer) return;
+    g.drawOffer = null; return g;
+  });
+}
 
 // Rematch: both players ask; the second one creates the next game (colours swap, fresh position).
 export async function requestRematch(gid, startFen){
@@ -440,38 +475,137 @@ export async function requestRematch(gid, startFen){
   });
   if (create){
     const g = create;
-    const tc = g.tc;
-    await F.set(R(`games/${nextId}`), {
-      white: g.black, black: g.white, wName: g.bName, bName: g.wName, wRating: g.bRating, bRating: g.wRating,
-      startFen, mode: g.mode, tc, clock: { w: tc.base, b: tc.base }, created: F.serverTimestamp(), lastMoveAt: F.serverTimestamp(),
-      status: 'active', ply: 0
-    });
+    const base = { startFen, mode: g.mode, tc: { id: g.tc.id, base: g.tc.base, inc: g.tc.inc || 0 } };
+    // ratings may have just changed from the previous game: give the result a moment to land
+    for (let i = 0; i < 3; i++){
+      try { await writeGame(nextId, g.black, g.white, base); break; }
+      catch(e){ if (i === 2) throw e; await new Promise(r => setTimeout(r, 800)); }
+    }
   }
 }
 
-// Apply my rating change once per game. Returns {before, after}.
-export function ratingDelta(g, color){
+// Elo change for `color` in game g (K = 40 for a player's first 20 games, then 24).
+export function ratingDelta(g, color, games){
   const mine = color === 'w' ? g.wRating : g.bRating, opp = color === 'w' ? g.bRating : g.wRating;
   const score = g.result === 'd' ? 0.5 : g.result === color ? 1 : 0;
   const exp = 1 / (1 + Math.pow(10, (opp - mine) / 400));
-  const games = (profileCache && profileCache.games) || 0;
+  if (games == null) games = (profileCache && profileCache.games) || 0;
   const K = games < 20 ? 40 : 24;
-  return Math.round(K * (score - exp));
+  return Math.max(-40, Math.min(40, Math.round(K * (score - exp))));
 }
-export async function applyResult(gid, g){
-  const color = colorOf(g, currentUser.uid);
-  if (!color || g.status !== 'over') return null;
-  const flag = await F.runTransaction(R(`games/${gid}/applied/${color}`), v => v ? undefined : true);
-  if (!flag.committed) return null;
-  const d = ratingDelta(g, color);
-  const field = g.result === 'd' ? 'draws' : g.result === color ? 'wins' : 'losses';
-  await F.runTransaction(R(`users/${currentUser.uid}`), p => {
-    if (!p) return p;
-    p.rating = Math.max(100, (p.rating || 1200) + d);
-    p.games = (p.games || 0) + 1;
-    p[field] = (p[field] || 0) + 1;
-    return p;
-  });
+const SELF_EVIDENT = { resign: 1, agreement: 1, time: 1, abandon: 1 };
+// A result counts once it can't have been faked: either the rules checked it when it was written,
+// or the player who did NOT end the game confirmed it (their app re-checked every move), or 10 quiet minutes passed.
+export function isVerified(g){
+  if (!g || g.status !== 'over') return false;
+  if (g.disputed) return false;
+  if (SELF_EVIDENT[g.reason]) return true;
+  const other = g.endBy === g.white ? g.black : g.endBy === g.black ? g.white : null;
+  if (other && g.ack && g.ack[other]) return true;
+  return g.endedAt && now() - g.endedAt > 605000;
+}
+export const isDisputed = g => !!(g && g.disputed);
+
+// Called by the player who did NOT end the game: re-check the whole game, then confirm or dispute it.
+export async function confirmOrDispute(gid, g){
+  const uid = currentUser.uid;
+  if (!g || g.status !== 'over' || !colorOf(g, uid) || g.endBy === uid) return null;
+  if ((g.ack && g.ack[uid]) || (g.disputed && g.disputed[uid])) return null;
+  if (SELF_EVIDENT[g.reason]) return 'ok';
+  const me = colorOf(g, uid);
+  const check = gg => {
+    const c = replay(gg);
+    // "illegal move" claims are true only if the stored game really has an illegal move made by me
+    // (replay stops right before it, so the side to move is whoever tried it)
+    if (gg.reason === 'illegal') return c.illegalAt != null && c.turn() === me ? null : 'false-illegal-claim';
+    if (c.illegalAt != null) return 'illegal-move';
+    const end = endState(c);
+    return (!end || end.reason !== gg.reason || end.result !== gg.result) ? 'false-result' : null;
+  };
+  let problem = check(g);
+  // never accuse anyone on a half-synced snapshot: re-read the game (twice) before disputing
+  for (let i = 0; i < 2 && problem; i++){
+    await new Promise(r => setTimeout(r, 1200));
+    const fresh = await getGame(gid).catch(() => null);
+    if (fresh && fresh.status === 'over'){ g = fresh; problem = check(g); }
+  }
+  if (!problem){ await F.set(R(`games/${gid}/ack/${uid}`), true); return 'ok'; }
+  await F.set(R(`games/${gid}/disputed/${uid}`), problem);
+  const against = g.endBy;
+  if (against) await reportPlayer(gid, against, 'auto:' + problem).catch(() => {});
+  return problem;
+}
+
+// Applies both players' rating changes (the rules let either player do it, each exactly once),
+// so a loss can't be dodged by closing the app. Returns my delta, or null if not (yet) applicable.
+export async function applyResults(gid){
+  if (!currentUser) return null;
+  const g = await getGame(gid);
+  if (!g || !isVerified(g)) return null;
+  const mine = colorOf(g, currentUser.uid);
+  let myDelta = null;
+  for (const color of ['w', 'b']){
+    const uid = color === 'w' ? g.white : g.black;
+    if (g.applied && g.applied[uid]) continue;
+    for (let attempt = 0; attempt < 3; attempt++){
+      const p = (await F.get(R(`users/${uid}`))).val();
+      if (!p) break;
+      const d = ratingDelta(g, color, p.games || 0);
+      const field = g.result === 'd' ? 'draws' : g.result === color ? 'wins' : 'losses';
+      const np = Object.assign({}, p, { rating: Math.max(100, (p.rating || 1200) + d), games: (p.games || 0) + 1, last: gid });
+      np[field] = (p[field] || 0) + 1;
+      try {
+        await F.update(R('/'), { [`users/${uid}`]: np, [`games/${gid}/applied/${uid}`]: true });
+        if (color === mine) myDelta = np.rating - (p.rating || 1200);
+        break;
+      } catch(e){
+        const done = (await F.get(R(`games/${gid}/applied/${uid}`))).exists();
+        if (done) break;
+        await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
+      }
+    }
+  }
+  forgetPending(gid);
   await refreshProfile();
-  return d;
+  return myDelta;
+}
+// games whose rating couldn't be applied yet (waiting for confirmation): retried on the next start
+const PKEY = 'cpt.pendingRatings';
+function pendingList(){ try { return JSON.parse(localStorage.getItem(PKEY) || '[]'); } catch(_){ return []; } }
+export function rememberPending(gid){ try { const l = pendingList().filter(x => x !== gid); l.push(gid); localStorage.setItem(PKEY, JSON.stringify(l.slice(-20))); } catch(_){} }
+function forgetPending(gid){ try { localStorage.setItem(PKEY, JSON.stringify(pendingList().filter(x => x !== gid))); } catch(_){} }
+export async function retryPending(){
+  for (const gid of pendingList()){
+    try {
+      const g = await getGame(gid);
+      if (!g || g.disputed || g.status !== 'over' || (g.applied && g.applied[g.white] && g.applied[g.black])) { forgetPending(gid); continue; }
+      await confirmOrDispute(gid, g);
+      await applyResults(gid);
+    } catch(_){}
+  }
+}
+
+// ---------------- fair play ----------------
+export async function sendFocus(gid, color, f){
+  try { await F.set(R(`games/${gid}/focus/${color}`), { n: f.n | 0, ms: Math.round(f.ms) }); } catch(_){}
+}
+export async function submitFairPlay(gid, oppUid, s){
+  return F.set(R(`fairplay/${oppUid}/${gid}`), {
+    by: currentUser.uid, n: s.n, match: s.match, acpl: s.acpl, away: s.away || 0, flag: !!s.flag, at: F.serverTimestamp()
+  });
+}
+// How often other players' apps flagged this account (counts distinct reporters, so one person can't brand someone)
+export async function fairPlaySummary(uid){
+  try {
+    const v = (await F.get(R(`fairplay/${uid}`))).val() || {};
+    const rows = Object.values(v);
+    const flagged = rows.filter(r => r && r.flag);
+    return { games: rows.length, flagged: flagged.length, reporters: new Set(flagged.map(r => r.by)).size };
+  } catch(_){ return { games: 0, flagged: 0, reporters: 0 }; }
+}
+export async function reportPlayer(gid, against, reason, note){
+  const r = F.push(R('reports'));
+  const v = { by: currentUser.uid, against, gid, reason: String(reason).slice(0, 40), at: F.serverTimestamp() };
+  if (note) v.note = String(note).slice(0, 300);
+  await F.set(r, v);
 }

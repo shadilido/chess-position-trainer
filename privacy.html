@@ -50,12 +50,13 @@
   <h2>3. Data we process when you use online play</h2>
   <table>
     <tr><th>Data</th><th>Why</th></tr>
-    <tr><td>Email address and a securely hashed password (email accounts), or your Google account ID, name and email (Google sign-in), or a random anonymous ID (guest accounts)</td><td>To create your account and let you sign in. Passwords are handled by Firebase Authentication; we never see them.</td></tr>
+    <tr><td>Email address and a securely hashed password (email accounts), or your Google account ID, name and email (Google sign-in)</td><td>To create your account and let you sign in. Passwords are handled by Firebase Authentication; we never see them.</td></tr>
     <tr><td>Display name</td><td>Shown to your opponents and in lobbies.</td></tr>
     <tr><td>Rating and game counts (wins, draws, losses)</td><td>Fair matchmaking and your profile.</td></tr>
     <tr><td>Online games: moves, starting position, time control, clocks, result, both players’ display names and ratings</td><td>To run the live game and show the result to both players.</td></tr>
     <tr><td>Matchmaking and lobby entries (your user ID, display name, rating, a lobby code, timestamps)</td><td>To pair you with an opponent or a friend. These entries are temporary and removed when the match starts or you cancel.</td></tr>
     <tr><td>Online status (whether you are connected)</td><td>To tell your opponent if you disconnect during a game.</td></tr>
+    <tr><td>Fair-play data: how often and how long you left the game screen during your turns, your opponents’ engine comparison of your moves (number of moves checked, engine-match percentage, average centipawn loss, whether it looked suspicious), and reports filed by or about you (reason, game, optional note)</td><td>To keep online play fair: detect engine use and other cheating, and review reports (legitimate interest of all players in fair games).</td></tr>
     <tr><td>Technical data such as your IP address and device/browser information</td><td>Processed automatically by Google Firebase to deliver the service and protect it from abuse.</td></tr>
   </table>
   <p>Display names, ratings and online games can be seen by other signed-in players (for example, your opponents). Don’t use your real name as a display name if you don’t want it to be visible.</p>
@@ -81,6 +82,7 @@
     <li>Account and profile: until you delete your account.</li>
     <li>Matchmaking and lobby entries: removed when a match starts or is cancelled (stale entries are cleared automatically).</li>
     <li>Online game records: kept so both players can see results; they may remain after you delete your account, showing only the display name you used then. Ask us via GitHub if you want them removed.</li>
+    <li>Fair-play data and reports: up to 12 months, or longer while an account is suspended or a report is being reviewed.</li>
   </ul>
 
   <h2>8. Your rights</h2>

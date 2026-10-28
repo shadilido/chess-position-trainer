@@ -21,7 +21,8 @@ export class Board {
     this.interactive = false;
     this.playerColor = 'w';
     this.onMove = opts.onMove || (() => {});
-    this.getLegal = opts.getLegal || (() => []);   // (fromSq) => [{to, promotion, flags}]
+    this.getLegal = opts.getLegal || (() => []);
+    this.onIllegal = opts.onIllegal || (() => {});   // (fromSq) => [{to, promotion, flags}]
     this.drawEnabled = opts.draw !== false;
     this.settings = { coords: true, legal: true, anim: true, pieces: 'prism', animSpeed: 'normal' };
     this.position = {};   // sq -> {type,color}
@@ -426,6 +427,7 @@ export class Board {
         const to = this._sqFromPoint(e.clientX, e.clientY);
         if (d.el) d.el.classList.remove('dragging');
         if (to && to !== d.from && this._tryMove(d.from, to, true)) return;
+        if (to && to !== d.from) this.onIllegal();
         // illegal drop: glide back home, keep the piece selected
         if (d.el){
           const { x, y } = this._xy(d.from);

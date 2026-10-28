@@ -45,12 +45,74 @@ export function initOnline(deps){
   }
   if (ON.isConfigured()){
     ON.init().then(() => {
-      ON.onUser(() => renderHomeOnline());
+      ON.onUser(u => { renderHomeOnline(); if (u) ON.retryPending(); });
       renderHomeOnline();
-      if (ON.user()) ON.goPresent();
+      if (ON.user()){ ON.goPresent(); ON.retryPending(); }
     }).catch(err => console.warn('online init failed', err));
   }
+  initLiveChannel();
+  initFocusTracking();
   renderHomeOnline();
+}
+
+// ======================= fair play: one live game, no help =======================
+// While a live game runs, the bot, reviews and analysis are locked — in this tab and in any other tab
+// of the app in the same browser (BroadcastChannel + a localStorage heartbeat as fallback).
+let liveChan = null, otherLiveUntil = 0, liveBeat = null;
+const TAB_ID = Math.random().toString(36).slice(2);
+function initLiveChannel(){
+  try {
+    liveChan = new BroadcastChannel('cpt-live');
+    liveChan.onmessage = e => { const m = e.data || {}; if (m.tab !== TAB_ID && m.type === 'live'){ otherLiveUntil = m.until; onOtherLive(); } if (m.type === 'over' && m.tab !== TAB_ID){ otherLiveUntil = 0; onOtherLive(); } };
+  } catch(_){}
+  window.addEventListener('storage', e => {
+    if (e.key !== 'cpt.live') return;
+    try { const m = JSON.parse(e.newValue || '{}'); if (m.tab !== TAB_ID){ otherLiveUntil = m.until || 0; onOtherLive(); } } catch(_){}
+  });
+}
+function beatLive(on){
+  const msg = { type: on ? 'live' : 'over', tab: TAB_ID, until: on ? Date.now() + 6000 : 0 };
+  try { liveChan && liveChan.postMessage(msg); } catch(_){}
+  try { localStorage.setItem('cpt.live', JSON.stringify(msg)); } catch(_){}
+}
+function setLiveBeat(on){
+  if (on && !liveBeat){ beatLive(true); liveBeat = setInterval(() => beatLive(true), 2000); }
+  if (!on && liveBeat){ clearInterval(liveBeat); liveBeat = null; beatLive(false); }
+}
+function liveHere(){ return !!(M && M.g && M.g.status === 'active'); }
+export function liveGameActive(){ return liveHere() || otherLiveUntil > Date.now(); }
+function onOtherLive(){
+  let lock = $('#live-lock');
+  const on = otherLiveUntil > Date.now() && !liveHere();
+  if (on && D && D.lockedScreen && D.lockedScreen()){
+    if (!lock){
+      lock = el('div', 'live-lock'); lock.id = 'live-lock';
+      lock.innerHTML = '<div class="ll-card"><h4>Live game in another tab</h4><p>The bot, reviews and analysis are locked while you play an online game. They unlock as soon as it ends.</p></div>';
+      document.body.appendChild(lock);
+    }
+  } else if (lock) lock.remove();
+  if (on) setTimeout(onOtherLive, 2500);
+}
+
+// Leaving the game screen during your own turn is recorded (shown to your opponent after the game).
+const FOCUS = { away: false, since: 0, n: 0, ms: 0 };
+function initFocusTracking(){
+  const leave = () => {
+    if (!M || !M.g || M.g.status !== 'active' || ON.sideToMove(M.g) !== M.color || FOCUS.away) return;
+    FOCUS.away = true; FOCUS.since = Date.now();
+  };
+  const back = () => {
+    if (!FOCUS.away) return;
+    FOCUS.away = false;
+    const dt = Date.now() - FOCUS.since;
+    if (dt < 1500 || !M || !M.g) return;          // ignore tiny blips (notification banners etc.)
+    FOCUS.n++; FOCUS.ms += dt;
+    ON.sendFocus(M.gid, M.color, FOCUS);
+  };
+  document.addEventListener('visibilitychange', () => document.hidden ? leave() : back());
+  window.addEventListener('blur', leave);
+  window.addEventListener('focus', back);
+  window.addEventListener('pagehide', leave);
 }
 
 // ======================= home =======================
@@ -79,6 +141,8 @@ async function needUser(next){
   ON.goPresent();
   return true;
 }
+const BANNED_HTML = `<div class="card notice banned"><h4 class="sec-h">Account suspended</h4>
+  <p class="about">This account was suspended for breaking the fair-play rules (for example using an engine or outside help during games). You can still train against the bot offline. If you think this is a mistake, open an issue on the project’s GitHub page.</p></div>`;
 
 // ======================= auth =======================
 let authTab = 'in';
@@ -136,10 +200,6 @@ function bindAuth(){
     authBusy(true);
     try { await ON.signInGoogle(); if (ON.user()) await authDone(); } catch(err){ authBusy(false); authErr(err); }
   });
-  $('#au-guest').addEventListener('click', async () => {
-    authBusy(true);
-    try { await ON.signInGuest($('#au-name').value); await authDone(); } catch(err){ authBusy(false); authErr(err); }
-  });
 }
 
 // ======================= account =======================
@@ -153,11 +213,10 @@ async function openAccount(){
 function renderAccount(){
   const u = ON.user(), p = ON.profile() || {};
   const body = $('#account-body');
-  const guest = u.isAnonymous;
   body.innerHTML = `
     <div class="card acc-card">
       <span class="av lg">${initial(p.name)}</span>
-      <div class="acc-id"><b>${esc(p.name)}</b><span>${guest ? 'Guest account' : esc(u.email || 'Google account')}</span></div>
+      <div class="acc-id"><b>${esc(p.name)}</b><span>${esc(u.email || 'Google account')}</span></div>
     </div>
     <div class="tiles">
       <div class="tile"><div class="n">${p.rating || 1200}</div><div class="l">Rating</div></div>
@@ -169,16 +228,7 @@ function renderAccount(){
       <h4 class="sec-h">Display name</h4>
       <div class="join-row"><input id="acc-name" maxlength="20" value="${esc(p.name)}"><button class="btn sec" id="acc-name-save">Save</button></div>
     </div>
-    ${guest ? `<div class="card">
-      <h4 class="sec-h">Keep your progress</h4>
-      <p class="about" style="margin:0 0 10px">Guest accounts are lost if you sign out or clear this browser. Add an email and password to keep your rating.</p>
-      <form id="acc-upgrade" class="fld-col">
-        <input id="up-email" type="email" placeholder="Email" autocomplete="email">
-        <input id="up-pass" type="password" placeholder="Password (6+ characters)" autocomplete="new-password">
-        <label class="chk"><input type="checkbox" id="up-agree"> <span>I agree to the <a href="terms.html" target="_blank">Terms</a> and <a href="privacy.html" target="_blank">Privacy Policy</a></span></label>
-        <div class="au-err" id="up-err"></div>
-        <button class="btn pri wide" type="submit">Save account</button>
-      </form></div>` : ''}
+    ${ON.isBanned() ? BANNED_HTML : `<div class="card"><h4 class="sec-h">Fair play</h4><p class="about" style="margin:0">Your account is in good standing. Online games are checked automatically for engine use, and results are verified by both players’ apps.</p></div>`}
     <div class="card acc-actions">
       <button class="btn sec wide" id="acc-signout">Sign out</button>
       <button class="danger" id="acc-delete">Delete account</button>
@@ -187,15 +237,7 @@ function renderAccount(){
   $('#acc-name-save').onclick = async () => {
     try { await ON.setName($('#acc-name').value); D.toast('Name saved'); renderAccount(); renderHomeOnline(); } catch(e){ D.toast(ON.authErrorText(e)); }
   };
-  const up = $('#acc-upgrade');
-  if (up) up.onsubmit = async e => {
-    e.preventDefault();
-    if (!$('#up-agree').checked){ $('#up-err').textContent = 'Please accept the Terms and Privacy Policy.'; return; }
-    try { await ON.upgradeGuest($('#up-email').value, $('#up-pass').value); D.toast('Account saved'); renderAccount(); }
-    catch(err){ $('#up-err').textContent = ON.authErrorText(err); }
-  };
   $('#acc-signout').onclick = async () => {
-    if (guest && !$('#acc-signout').dataset.armed){ $('#acc-signout').dataset.armed = 1; $('#acc-signout').textContent = 'Guest progress will be lost — tap again'; return; }
     await ON.logout(); renderHomeOnline(); D.show('home'); D.toast('Signed out');
   };
   const del = $('#acc-delete');
@@ -226,6 +268,7 @@ function renderHub(){
       <p class="about">You can still train against the bot offline.</p></div>`;
     return;
   }
+  if (ON.isBanned()){ body.innerHTML = BANNED_HTML; return; }
   const p = ON.profile() || {};
   body.innerHTML = `
     <button class="card me-card" id="on-me"><span class="av">${initial(p.name)}</span><span class="me-txt"><b>${esc(p.name)}</b><small>Rating ${p.rating || 1200} · ${p.games || 0} games</small></span><span class="chev"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></button>
@@ -268,6 +311,7 @@ function bindHub(){
 }
 async function startFenFor(){
   // every online game starts from a random, balanced, legal position
+  if (window.__forceStartFen) return window.__forceStartFen;   // test hook
   await loadPositions();
   // balanced positions only for fairness (|eval| small)
   for (let i = 0; i < 30; i++){
@@ -285,7 +329,7 @@ async function startSearch(){
     const el2 = $('#on-search-t'); if (el2) el2.textContent = `Searching… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }, 500);
   const startFen = await startFenFor(pref.mode);
-  searchCancel = ON.findMatch({ mode: pref.mode, tc: pref.tc, startFen }, gid => { stopSearch(true); sfx('check'); openMatch(gid); },
+  searchCancel = ON.findMatch({ mode: pref.mode, tc: pref.tc, startFen }, gid => { stopSearch(true); openMatch(gid); },
     err => { stopSearch(); D.toast('Matchmaking failed: ' + (err.message || err)); });
 }
 function stopSearch(matched){
@@ -299,7 +343,7 @@ async function startLobby(){
   $('#on-create').disabled = true;
   try {
     const startFen = await startFenFor(pref.mode);
-    const lb = await ON.createLobby({ mode: pref.mode, tc: pref.tc, startFen }, gid => { lobbyCancel = null; sfx('check'); openMatch(gid); });
+    const lb = await ON.createLobby({ mode: pref.mode, tc: pref.tc, startFen }, gid => { lobbyCancel = null; openMatch(gid); });
     lobbyCancel = lb.cancel;
     $('#on-create').hidden = true;
     $('#on-lobby').hidden = false;
@@ -325,7 +369,7 @@ async function doJoin(){
   stopSearch(); stopLobby();
   $('#on-join').disabled = true;
   try {
-    const j = await ON.joinLobby(code, gid => { joinCancel = null; sfx('check'); openMatch(gid); });
+    const j = await ON.joinLobby(code, gid => { joinCancel = null; openMatch(gid); });
     joinCancel = j.cancel;
     err.textContent = '';
     $('#on-join').textContent = 'Joined ✓';
@@ -335,7 +379,7 @@ async function doJoin(){
 
 // ======================= live match =======================
 function bindMatch(){
-  matchBoard = new Board($('#match-board'), { onMove: onMyMove, getLegal: sq => legalFrom(sq) });
+  matchBoard = new Board($('#match-board'), { onMove: onMyMove, getLegal: sq => legalFrom(sq), onIllegal: () => sfx('illegal') });
   D.registerBoard(matchBoard);
   $('#match-back').addEventListener('click', () => { D.show('home'); renderHomeOnline(); });
   $('#act-resign').addEventListener('click', onResignClick);
@@ -351,6 +395,14 @@ function bindMatch(){
   });
   $('#ms-new').addEventListener('click', () => { closeMatch(); openHub('match'); });
   $('#ms-review').addEventListener('click', () => { if (M && M.rec) D.openReview(M.rec, 'match'); });
+  $('#ms-report').addEventListener('click', () => { const b = $('#report-box'); b.hidden = !b.hidden; });
+  $('#rb-opts').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b || !M || !M.g) return;
+    const opp = M.color === 'w' ? M.g.black : M.g.white;
+    $('#report-box').hidden = true;
+    try { await ON.reportPlayer(M.gid, opp, b.dataset.r); M.reported = true; $('#ms-report').textContent = 'Report sent, thank you'; $('#ms-report').disabled = true; }
+    catch(_){ D.toast('Could not send the report'); }
+  });
 }
 function legalFrom(sq){
   if (!M || !M.g || M.g.status !== 'active' || M.busy) return [];
@@ -358,8 +410,12 @@ function legalFrom(sq){
 }
 export function openMatch(gid){
   closeMatch();
-  M = { gid, g: null, color: null, lastPly: -1, ended: false, busy: false, rec: null, oppOnline: true, oppGoneAt: 0, lastClaim: 0 };
+  M = { gid, g: null, color: null, lastPly: -1, ended: false, busy: false, rec: null, oppOnline: true, oppGoneAt: 0, lastClaim: 0, lowWarned: false, offerSeen: null, oppFlagged: false };
+  FOCUS.away = false; FOCUS.n = 0; FOCUS.ms = 0;
   $('#match-sheet').hidden = true;
+  $('#report-box').hidden = true;
+  $('#ms-fair').hidden = true;
+  $('#ms-report').disabled = false; $('#ms-report').textContent = 'Report opponent';
   $('#match-note').hidden = true;
   D.show('match');
   matchBoard.setArrows([]);
@@ -372,6 +428,7 @@ function closeMatch(){
   if (M.presUnsub) M.presUnsub();
   clearInterval(M.tick);
   M = null;
+  setLiveBeat(false);
 }
 function onGame(g){
   if (!M) return;
@@ -389,9 +446,30 @@ function onGame(g){
     $('#match-chip').textContent = 'Online';
     $('#match-sub').textContent = `${ON.tcById(g.tc.id).label} · you play ${M.color === 'w' ? 'White' : 'Black'}`;
     D.layout();
+    if (g.status === 'active' && (g.ply || 0) < 2) sfx('start');
+    // warn if this opponent has been flagged by several different players
+    const gidNow = M.gid;
+    ON.fairPlaySummary(oppUid).then(fp => {
+      if (!M || M.gid !== gidNow) return;
+      M.oppFlagged = fp.flagged >= 3 && fp.reporters >= 2;
+      if (M.oppFlagged && M.g) onGame(M.g);
+    });
   }
+  setLiveBeat(g.status === 'active');
   // board
   M.chess = ON.replay(g);
+  if (M.chess.illegalAt != null && M.chess.turn() !== M.color && g.status === 'active' && !M.illegalClaimed){
+    // only a modified app can send an illegal move: after re-checking the stored game, win it and report it
+    M.illegalClaimed = true;
+    const mm = M, opp2 = M.color === 'w' ? g.black : g.white;
+    setTimeout(async () => {
+      const fresh = await ON.getGame(mm.gid).catch(() => null);
+      const rc = fresh && ON.replay(fresh);
+      if (!fresh || fresh.status !== 'active' || rc.illegalAt == null || rc.turn() === mm.color){ mm.illegalClaimed = false; return; }
+      ON.claimIllegal(mm.gid).catch(() => {});
+      ON.reportPlayer(mm.gid, opp2, 'auto:illegal-move').catch(() => {});
+    }, 1500);
+  }
   const ply = g.ply || 0;
   const lastU = ply ? g.moves[ply - 1] : null;
   const animate = ply === M.lastPly + 1;
@@ -407,7 +485,7 @@ function onGame(g){
   // bars
   const meName = M.color === 'w' ? g.wName : g.bName, oppName = M.color === 'w' ? g.bName : g.wName;
   const meR = M.color === 'w' ? g.wRating : g.bRating, oppR = M.color === 'w' ? g.bRating : g.wRating;
-  setBar('#pbar-top', oppName, oppR, opp);
+  setBar('#pbar-top', oppName, oppR, opp, M.oppFlagged);
   setBar('#pbar-bot', meName + ' (you)', meR, M.color);
   // moves strip
   renderMoves(g);
@@ -419,7 +497,9 @@ function onGame(g){
   $('#act-draw').innerHTML = `${ICON.half}<span>${g.drawOffer === M.color ? 'Draw offered' : 'Offer draw'}</span>`;
   renderNote();
   tick();
+  if (g.status === 'active' && g.drawOffer === opp && M.offerSeen !== g.ply){ M.offerSeen = g.ply; sfx('notify'); }
   if (g.status !== 'active') onEnded(g);
+  if (g.status === 'over' && M.endedShown && M.awaitingConfirm && ON.isVerified(g)){ M.awaitingConfirm = false; settleRating(g); }
   if (g.next && M.endedShown && !M.nextScheduled){ M.nextScheduled = true; const next = g.next; setTimeout(() => openMatch(next), 400); }
   // rematch button state
   if (g.status !== 'active' && g.rematch){
@@ -428,12 +508,12 @@ function onGame(g){
   }
   renderHomeOnline();
 }
-function setBar(sel, name, rating, color){
+function setBar(sel, name, rating, color, flagged){
   const bar = $(sel);
   bar.querySelector('.pb-av').textContent = initial(name);
   bar.querySelector('.pb-av').className = 'pb-av ' + (color === 'w' ? 'cw' : 'cb');
   bar.querySelector('.pb-name').textContent = name;
-  bar.querySelector('.pb-rating').textContent = rating ? `(${rating})` : '';
+  bar.querySelector('.pb-rating').innerHTML = (rating ? `(${rating})` : '') + (flagged ? '<span class="fp-badge" title="Flagged by several players for possible engine use">⚠ flagged</span>' : '');
 }
 function renderMoves(g){
   const strip = $('#match-moves');
@@ -443,7 +523,8 @@ function renderMoves(g){
   for (let i = 0; i < n; i++){
     const u = g.moves[i];
     const parts = c.fen().split(' ');
-    const r = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+    let r = null; try { r = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }); } catch(_){}
+    if (!r){ strip.appendChild(el('span', 'mv', '(illegal move)')); break; }
     if (parts[1] === 'w' || i === 0) strip.appendChild(el('span', 'mn', parts[1] === 'w' ? `${parts[5]}.` : `${parts[5]}…`));
     strip.appendChild(el('span', 'mv' + (i === n - 1 ? ' last' : ''), r.san));
   }
@@ -470,6 +551,8 @@ function tick(){
   };
   setC('#pbar-top', opp); setC('#pbar-bot', M.color);
   if (g.status !== 'active') return;
+  const lowAt = Math.min(20000, g.tc.base * 0.1);
+  if (!M.lowWarned && (g.ply || 0) >= 2 && turn === M.color && c[M.color] < lowAt && c[M.color] > 0){ M.lowWarned = true; sfx('lowtime'); }
   const t = ON.now();
   // timeouts: anyone can claim when the clock is truly out (checked again server-side in a transaction)
   const firstMoveLeft = 30000 - (t - g.lastMoveAt);
@@ -486,7 +569,7 @@ function renderNote(){
     if (g.drawOffer === opp){
       html = `<span>Your opponent offers a draw.</span><button class="btn sec sm" id="dr-no">Decline</button><button class="btn pri sm" id="dr-yes">Accept</button>`;
     } else if (!M.oppOnline && (g.ply || 0) >= 1){
-      const left = Math.max(0, 45 - Math.floor((Date.now() - M.oppGoneAt) / 1000));
+      const left = Math.max(0, 46 - Math.floor((Date.now() - M.oppGoneAt) / 1000), 46 - Math.floor((ON.now() - g.lastMoveAt) / 1000));
       html = left > 0 ? `<span>Opponent disconnected. You can claim the win in ${left}s.</span>` : `<span>Opponent left the game.</span><button class="btn pri sm" id="ab-claim">Claim win</button>`;
       if (left > 0) setTimeout(renderNote, 1000);
     } else if ((g.ply || 0) < 2){
@@ -500,7 +583,7 @@ function renderNote(){
   const y = $('#dr-yes'), n = $('#dr-no'), cl = $('#ab-claim');
   if (y) y.onclick = () => ON.acceptDraw(M.gid);
   if (n) n.onclick = () => ON.declineDraw(M.gid);
-  if (cl) cl.onclick = () => ON.claimAbandon(M.gid);
+  if (cl) cl.onclick = () => ON.claimAbandon(M.gid).catch(() => D.toast('Your opponent is back, keep playing'));
 }
 let promoResolve = null;
 function askPromotion(){
@@ -542,7 +625,7 @@ async function onResignClick(){
 const REASON = {
   mate: 'by checkmate', resign: 'by resignation', time: 'on time', abandon: 'opponent left',
   agreement: 'by agreement', stalemate: 'by stalemate', repetition: 'by repetition', insufficient: 'insufficient material',
-  fifty: '50-move rule', abort: 'game aborted', nomove: 'no first move'
+  fifty: '50-move rule', abort: 'game aborted', nomove: 'no first move', illegal: 'illegal move (checked by both apps)'
 };
 async function onEnded(g){
   if (M.endedShown) return;
@@ -560,16 +643,78 @@ async function onEnded(g){
   $('#match-sheet').hidden = false;
   sfx(aborted || draw ? 'draw' : won ? 'win' : 'lose');
   if (aborted) return;
-  // rating + history
-  const before = M.color === 'w' ? g.wRating : g.bRating;
-  try {
-    const d = await ON.applyResult(M.gid, g);
-    const delta = d != null ? d : ON.ratingDelta(g, M.color);
-    $('#ms-rating').innerHTML = `Rating ${before} → <b>${before + delta}</b> <span class="${delta >= 0 ? 'up' : 'down'}">(${delta >= 0 ? '+' : ''}${delta})</span>`;
-  } catch(e){ console.warn(e); }
+  const mm = M;
+  // history + background analysis (also powers the fair-play check)
   M.rec = buildRecord(g);
   D.addHistory(M.rec);
   renderHomeOnline();
+  showOppFocus(g);
+  // re-check the game if the opponent ended it, then apply ratings
+  try { await ON.confirmOrDispute(M.gid, g); } catch(e){ console.warn(e); }
+  if (M !== mm) return;
+  const fresh = await ON.getGame(M.gid).catch(() => null) || g;
+  if ((fresh.ply || 0) !== (g.ply || 0)){ M.rec = buildRecord(fresh); D.addHistory(M.rec); }
+  if (ON.isDisputed(fresh)){ $('#ms-rating').textContent = 'This game was flagged as invalid, so ratings stay the same. It has been reported.'; }
+  else if (ON.isVerified(fresh)) await settleRating(fresh);
+  else { M.awaitingConfirm = true; ON.rememberPending(M.gid); $('#ms-rating').textContent = 'Rating updates as soon as your opponent’s app confirms the result.'; }
+  runFairPlay(mm, fresh);
+}
+async function settleRating(g){
+  if (!M) return;
+  const gid = M.gid, color = M.color;
+  const before = color === 'w' ? g.wRating : g.bRating;
+  try {
+    let delta = await ON.applyResults(gid);
+    if (delta == null){
+      // already applied (by the opponent's app): read the real numbers
+      const p = await ON.refreshProfile();
+      delta = p ? p.rating - before : ON.ratingDelta(g, color);
+    }
+    if (!M || M.gid !== gid) return;
+    $('#ms-rating').innerHTML = `Rating ${before} → <b>${before + delta}</b> <span class="${delta >= 0 ? 'up' : 'down'}">(${delta >= 0 ? '+' : ''}${delta})</span>`;
+  } catch(e){ console.warn(e); }
+  renderHomeOnline();
+}
+function showOppFocus(g){
+  const opp = M.color === 'w' ? 'b' : 'w';
+  const f = g.focus && g.focus[opp];
+  if (f && f.n >= 3){
+    M.fairNote = `Your opponent left the game screen <b>${f.n}×</b> during their turns (${Math.round(f.ms / 1000)}s in total).`;
+    renderFair();
+  }
+}
+function renderFair(){
+  if (!M) return;
+  const box = $('#ms-fair');
+  const parts = [M.fairCheck, M.fairNote].filter(Boolean);
+  box.hidden = !parts.length;
+  box.className = 'ms-fair' + (M.fairFlag ? ' warn' : M.fairCheck ? ' ok' : '');
+  box.innerHTML = parts.join('<br>');
+}
+// Engine-match check of the opponent's moves (non-obvious moves only). Strong, human play scores far lower
+// than an engine copying its first choice; a flag is only shown to others after several different players flag the same account.
+async function runFairPlay(mm, g){
+  if (!D.analyze || !mm.rec) return;
+  let rv;
+  try { rv = await D.analyze(mm.rec); } catch(_){ return; }
+  if (!rv) return;
+  const rows = rv.moves.filter(m => m.by !== 'p' && m.fp && !m.fp.obvious);
+  const n = rows.length;
+  if (n < 8) return;
+  const match = rows.filter(m => m.fp.top).length / n;
+  const acpl = rows.reduce((a, m) => a + Math.min(1000, m.fp.cpLoss), 0) / n;
+  const opp = mm.color === 'w' ? 'b' : 'w';
+  const away = (g.focus && g.focus[opp] && g.focus[opp].n) || 0;
+  const flag = n >= 12 && ((match >= 0.9 && acpl <= 15) || (match >= 0.8 && acpl <= 8 && n >= 20) || (away >= 3 && match >= 0.8 && acpl <= 20));
+  const oppUid = mm.color === 'w' ? g.black : g.white;
+  ON.submitFairPlay(mm.gid, oppUid, { n, match: Math.round(match * 100) / 100, acpl: Math.round(acpl), away, flag }).catch(() => {});
+  if (flag) ON.reportPlayer(mm.gid, oppUid, 'auto:engine-match').catch(() => {});
+  if (M !== mm) return;
+  M.fairFlag = flag;
+  M.fairCheck = flag
+    ? `⚠ <b>Unusually engine-like play</b>: your opponent matched Stockfish’s first choice on ${Math.round(match * 100)}% of ${n} non-obvious moves. The game was flagged for review.`
+    : `<b>Fair play ✓</b> Your opponent’s play looks human (engine match ${Math.round(match * 100)}% on ${n} non-obvious moves).`;
+  renderFair();
 }
 function buildRecord(g){
   const c = new Chess(g.startFen);
@@ -578,7 +723,8 @@ function buildRecord(g){
     const u = g.moves[i];
     const fenBefore = c.fen();
     const mover = c.turn();
-    const r = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+    let r = null; try { r = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }); } catch(_){}
+    if (!r) break;
     moves.push({ uci: u, san: r.san, by: mover === M.color ? 'p' : 'b', fenBefore, fenAfter: c.fen(), captured: r.captured || null, from: r.from, to: r.to });
   }
   const won = g.result === M.color, draw = g.result === 'd';
@@ -605,3 +751,4 @@ export function currentMatch(){ return M; }
 window.__matchFen = () => M && M.chess ? M.chess.fen() : null;
 window.__matchTurn = () => M && M.g ? ON.sideToMove(M.g) : null;
 window.__matchPly = () => M && M.g ? (M.g.ply || 0) : -1;
+window.__matchGid = () => M ? M.gid : null;

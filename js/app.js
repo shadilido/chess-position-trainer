@@ -6,7 +6,7 @@ import { store } from './store.js';
 import { play as sfx, unlockAudio, setSoundEnabled, setSoundPack, setVolume, SOUND_PACKS, previewPack } from './sound.js';
 import { loadPositions, pickPosition, PHASES } from './positions.js';
 import { analyzeGame, CLASSES, CLASS_ORDER, TAGS, uciToSan, moveLabel } from './review.js';
-import { initOnline, layoutMatch, renderHomeOnline } from './online-ui.js';
+import { initOnline, layoutMatch, renderHomeOnline, liveGameActive } from './online-ui.js';
 import { winProb, scoreToWhiteCp, fmtEval, el, debounce } from './util.js';
 import { getBackgroundBlob, saveBackground, clearBackground, applyBackgroundBlob, backgroundUrl } from './background.js';
 
@@ -59,7 +59,7 @@ const extraBoards = [];
 async function boot(){
   applySettings();
   loadBackground();
-  playBoard = new Board($('#play-board'), { onMove: onPlayerMove, getLegal: sq => legalFrom(sq) });
+  playBoard = new Board($('#play-board'), { onMove: onPlayerMove, getLegal: sq => legalFrom(sq), onIllegal: () => sfx('illegal') });
   reviewBoard = new Board($('#review-board'));
   reviewBoard.root.classList.add('rv');
   heroBoard = new Board($('#hero-board'), { draw: false });
@@ -71,7 +71,9 @@ async function boot(){
     settings: () => settings,
     registerBoard: b => { extraBoards.push(b); applyBoardSettings(); },
     addHistory: rec => { history = history.filter(h => h.id !== rec.id); history.unshift(rec); store.saveHistory(history); },
-    openReview: (rec, from) => openReview(rec, from)
+    openReview: (rec, from) => openReview(rec, from),
+    analyze: rec => runAnalysis(rec),
+    lockedScreen: () => current === 'play' || current === 'review'
   });
   renderHome();
   layout();
@@ -130,6 +132,11 @@ function saveSettings(){ store.saveSettings(settings); applySettings(); applyBoa
 // ================= Navigation =================
 let current = 'home';
 function show(name){
+  // fair play: no bot, reviews or analysis while a live online game is running
+  if ((name === 'play' || name === 'review') && liveGameActive()){
+    toast('Finish your online game first: the bot and analysis are locked during live games.');
+    return;
+  }
   current = name;
   $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-' + name));
   if (name === 'home') renderHome();
@@ -292,6 +299,7 @@ async function newChallenge(){
   G.busy = false;
   saveActive();
   setupPlayView();
+  sfx('start');
   yourTurn();
 }
 

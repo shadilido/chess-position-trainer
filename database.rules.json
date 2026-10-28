@@ -2,34 +2,106 @@
   "rules": {
     "users": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid",
-        "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
-        "rating": { ".validate": "newData.isNumber()" }
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !root.child('banned/' + auth.uid).exists()) && (auth.uid === $uid || (data.exists() && newData.exists()))",
+        ".validate": "((!data.exists() && auth.uid === $uid && newData.child('rating').val() === 1200 && newData.child('games').val() === 0 && newData.child('wins').val() === 0 && newData.child('losses').val() === 0 && newData.child('draws').val() === 0 && !newData.child('last').exists()) || (data.exists() && auth.uid === $uid && newData.child('rating').val() === data.child('rating').val() && newData.child('games').val() === data.child('games').val() && newData.child('wins').val() === data.child('wins').val() && newData.child('losses').val() === data.child('losses').val() && newData.child('draws').val() === data.child('draws').val() && newData.child('last').val() === data.child('last').val()) || (data.exists() && newData.child('last').isString() && !(newData.child('last').val() === data.child('last').val()) && root.child('games/' + newData.child('last').val()).child('status').val() === 'over' && (root.child('games/' + newData.child('last').val()).child('white').val() === $uid || root.child('games/' + newData.child('last').val()).child('black').val() === $uid) && (root.child('games/' + newData.child('last').val()).child('white').val() === auth.uid || root.child('games/' + newData.child('last').val()).child('black').val() === auth.uid) && !root.child('games/' + newData.child('last').val()).child('applied/' + $uid).exists() && newData.parent().parent().child('games/' + newData.child('last').val()).child('applied/' + $uid).val() === true && !root.child('games/' + newData.child('last').val()).child('disputed').exists() && (root.child('games/' + newData.child('last').val()).child('reason').val() === 'resign' || root.child('games/' + newData.child('last').val()).child('reason').val() === 'agreement' || root.child('games/' + newData.child('last').val()).child('reason').val() === 'time' || root.child('games/' + newData.child('last').val()).child('reason').val() === 'abandon' || (root.child('games/' + newData.child('last').val()).child('endBy').val() === root.child('games/' + newData.child('last').val()).child('white').val() && root.child('games/' + newData.child('last').val()).child('ack/' + root.child('games/' + newData.child('last').val()).child('black').val()).val() === true) || (root.child('games/' + newData.child('last').val()).child('endBy').val() === root.child('games/' + newData.child('last').val()).child('black').val() && root.child('games/' + newData.child('last').val()).child('ack/' + root.child('games/' + newData.child('last').val()).child('white').val()).val() === true) || now - root.child('games/' + newData.child('last').val()).child('endedAt').val() > 600000) && newData.child('name').val() === data.child('name').val() && newData.child('created').val() === data.child('created').val() && newData.child('nameSet').val() === data.child('nameSet').val() && newData.child('games').val() === data.child('games').val() + 1 && ((((root.child('games/' + newData.child('last').val()).child('white').val() === $uid && root.child('games/' + newData.child('last').val()).child('result').val() === 'w') || (root.child('games/' + newData.child('last').val()).child('black').val() === $uid && root.child('games/' + newData.child('last').val()).child('result').val() === 'b')) && newData.child('wins').val() === data.child('wins').val() + 1 && newData.child('losses').val() === data.child('losses').val() && newData.child('draws').val() === data.child('draws').val() && newData.child('rating').val() >= data.child('rating').val() && newData.child('rating').val() <= data.child('rating').val() + 40) || (((root.child('games/' + newData.child('last').val()).child('white').val() === $uid && root.child('games/' + newData.child('last').val()).child('result').val() === 'b') || (root.child('games/' + newData.child('last').val()).child('black').val() === $uid && root.child('games/' + newData.child('last').val()).child('result').val() === 'w')) && newData.child('losses').val() === data.child('losses').val() + 1 && newData.child('wins').val() === data.child('wins').val() && newData.child('draws').val() === data.child('draws').val() && newData.child('rating').val() <= data.child('rating').val() && newData.child('rating').val() >= data.child('rating').val() - 40) || (root.child('games/' + newData.child('last').val()).child('result').val() === 'd' && newData.child('draws').val() === data.child('draws').val() + 1 && newData.child('wins').val() === data.child('wins').val() && newData.child('losses').val() === data.child('losses').val() && newData.child('rating').val() <= data.child('rating').val() + 40 && newData.child('rating').val() >= data.child('rating').val() - 40))))",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20"
+        },
+        "rating": {
+          ".validate": "newData.isNumber() && newData.val() >= 100 && newData.val() <= 4000"
+        },
+        "games": {
+          ".validate": "newData.isNumber()"
+        },
+        "wins": {
+          ".validate": "newData.isNumber()"
+        },
+        "losses": {
+          ".validate": "newData.isNumber()"
+        },
+        "draws": {
+          ".validate": "newData.isNumber()"
+        }
       }
     },
     "presence": {
       "$uid": {
-        ".read": "auth != null",
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && auth.uid === $uid"
       }
     },
     "queue": {
       "$pool": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !root.child('banned/' + auth.uid).exists())"
       }
     },
     "lobbies": {
       "$code": {
-        ".read": "auth != null",
-        ".write": "auth != null && ((!data.exists() && !newData.exists()) || (!data.exists() && newData.child('host').val() === auth.uid) || (data.exists() && data.child('host').val() === auth.uid) || (data.exists() && newData.exists() && newData.child('host').val() === data.child('host').val() && (!data.child('guest').exists() || data.child('guest').val() === auth.uid) && (!newData.child('guest').exists() || newData.child('guest').val() === auth.uid)))"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !root.child('banned/' + auth.uid).exists()) && ((!data.exists() && !newData.exists()) || (!data.exists() && newData.child('host').val() === auth.uid) || (data.exists() && data.child('host').val() === auth.uid) || (data.exists() && newData.exists() && newData.child('host').val() === data.child('host').val() && (!data.child('guest').exists() || data.child('guest').val() === auth.uid) && (!newData.child('guest').exists() || newData.child('guest').val() === auth.uid)))"
       }
     },
     "games": {
       "$gid": {
-        ".read": "auth != null",
-        ".write": "auth != null && ((!data.exists() && !newData.exists()) || (!data.exists() && (newData.child('white').val() === auth.uid || newData.child('black').val() === auth.uid)) || (data.exists() && newData.exists() && (data.child('white').val() === auth.uid || data.child('black').val() === auth.uid) && newData.child('white').val() === data.child('white').val() && newData.child('black').val() === data.child('black').val()))"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !root.child('banned/' + auth.uid).exists()) && ((!data.exists() && !newData.exists()) || (!data.exists() && (newData.child('white').val() === auth.uid || newData.child('black').val() === auth.uid)) || (data.exists() && newData.exists() && (data.child('white').val() === auth.uid || data.child('black').val() === auth.uid)))",
+        ".validate": "((!data.exists() && newData.child('white').isString() && newData.child('black').isString() && newData.child('white').val() !== newData.child('black').val() && newData.child('status').val() === 'active' && newData.child('ply').val() === 0 && !newData.child('moves').exists() && !newData.child('result').exists() && !newData.child('applied').exists() && !newData.child('ack').exists() && newData.child('tc/base').isNumber() && newData.child('tc/base').val() >= 60000 && newData.child('tc/base').val() <= 3600000 && newData.child('tc/inc').isNumber() && newData.child('tc/inc').val() >= 0 && newData.child('tc/inc').val() <= 60000 && newData.child('clock/w').val() === newData.child('tc/base').val() && newData.child('clock/b').val() === newData.child('tc/base').val() && newData.child('startFen').isString() && newData.child('startFen').val().length < 100 && ((newData.child('startFen').val().contains(' w ') && newData.child('turn').val() === 'w') || (newData.child('startFen').val().contains(' b ') && newData.child('turn').val() === 'b')) && newData.child('lastMoveAt').val() <= now + 3000 && newData.child('lastMoveAt').val() >= now - 60000 && newData.child('wRating').val() === root.child('users/' + newData.child('white').val() + '/rating').val() && newData.child('bRating').val() === root.child('users/' + newData.child('black').val() + '/rating').val() && newData.child('wName').val() === root.child('users/' + newData.child('white').val() + '/name').val() && newData.child('bName').val() === root.child('users/' + newData.child('black').val() + '/name').val()) || (data.exists() && (newData.child('white').val() === data.child('white').val() && newData.child('black').val() === data.child('black').val() && newData.child('wName').val() === data.child('wName').val() && newData.child('bName').val() === data.child('bName').val() && newData.child('wRating').val() === data.child('wRating').val() && newData.child('bRating').val() === data.child('bRating').val() && newData.child('startFen').val() === data.child('startFen').val() && newData.child('tc/base').val() === data.child('tc/base').val() && newData.child('tc/inc').val() === data.child('tc/inc').val() && newData.child('created').val() === data.child('created').val() && newData.child('mode').val() === data.child('mode').val()) && ((data.child('status').val() === 'active' && ((newData.child('ply').val() === data.child('ply').val() + 1 && ((data.child('white').val() === auth.uid && data.child('turn').val() === 'w') || (data.child('black').val() === auth.uid && data.child('turn').val() === 'b')) && (newData.child('turn').val() === 'w' || newData.child('turn').val() === 'b') && newData.child('turn').val() !== data.child('turn').val() && newData.child('moves/' + data.child('ply').val()).isString() && newData.child('moves/' + data.child('ply').val()).val().length >= 4 && newData.child('moves/' + data.child('ply').val()).val().length <= 5 && newData.child('lastMoveAt').val() <= now + 3000 && newData.child('lastMoveAt').val() >= now - 10000 && newData.child('lastMoveAt').val() >= data.child('lastMoveAt').val() && ((data.child('ply').val() < 2 && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (data.child('ply').val() >= 2 && ((data.child('turn').val() === 'w' && newData.child('clock/b').val() === data.child('clock/b').val() && newData.child('clock/w').val() <= data.child('clock/w').val() - (newData.child('lastMoveAt').val() - data.child('lastMoveAt').val()) + data.child('tc/inc').val() + 1500 && newData.child('clock/w').val() > 0) || (data.child('turn').val() === 'b' && newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() <= data.child('clock/b').val() - (newData.child('lastMoveAt').val() - data.child('lastMoveAt').val()) + data.child('tc/inc').val() + 1500 && newData.child('clock/b').val() > 0)))) && (!newData.child('drawOffer').exists() || newData.child('drawOffer').val() === data.child('drawOffer').val()) && (newData.child('status').val() === 'active' || (newData.child('status').val() === 'over' && newData.child('endedAt').val() <= now + 3000 && newData.child('endedAt').val() >= now - 10000 && newData.child('endBy').val() === auth.uid && ((newData.child('reason').val() === 'mate' && newData.child('result').val() === data.child('turn').val()) || ((newData.child('reason').val() === 'stalemate' || newData.child('reason').val() === 'repetition' || newData.child('reason').val() === 'insufficient' || newData.child('reason').val() === 'fifty') && newData.child('result').val() === 'd'))))) || (newData.child('ply').val() === data.child('ply').val() && newData.child('turn').val() === data.child('turn').val() && newData.child('lastMoveAt').val() === data.child('lastMoveAt').val() && ((newData.child('status').val() === 'active' && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val()) && (!newData.child('drawOffer').exists() || newData.child('drawOffer').val() === data.child('drawOffer').val() || ((data.child('white').val() === auth.uid && newData.child('drawOffer').val() === 'w') || (data.child('black').val() === auth.uid && newData.child('drawOffer').val() === 'b')))) || (newData.child('endedAt').val() <= now + 3000 && newData.child('endedAt').val() >= now - 10000 && newData.child('endBy').val() === auth.uid && ((newData.child('status').val() === 'over' && newData.child('reason').val() === 'resign' && ((data.child('white').val() === auth.uid && newData.child('result').val() === 'b') || (data.child('black').val() === auth.uid && newData.child('result').val() === 'w')) && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (newData.child('status').val() === 'over' && newData.child('reason').val() === 'agreement' && newData.child('result').val() === 'd' && ((data.child('white').val() === auth.uid && data.child('drawOffer').val() === 'b') || (data.child('black').val() === auth.uid && data.child('drawOffer').val() === 'w')) && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (newData.child('status').val() === 'aborted' && newData.child('reason').val() === 'abort' && newData.child('result').val() === 'x' && data.child('ply').val() < 2 && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (newData.child('status').val() === 'aborted' && newData.child('reason').val() === 'nomove' && newData.child('result').val() === 'x' && data.child('ply').val() < 2 && now - data.child('lastMoveAt').val() > 28000 && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (newData.child('status').val() === 'over' && newData.child('reason').val() === 'abandon' && ((data.child('white').val() === auth.uid && newData.child('result').val() === 'w') || (data.child('black').val() === auth.uid && newData.child('result').val() === 'b')) && ((data.child('white').val() === auth.uid && !root.child('presence/' + data.child('black').val()).exists()) || (data.child('black').val() === auth.uid && !root.child('presence/' + data.child('white').val()).exists())) && now - data.child('lastMoveAt').val() > 44000 && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (newData.child('status').val() === 'over' && newData.child('reason').val() === 'illegal' && ((data.child('white').val() === auth.uid && newData.child('result').val() === 'w') || (data.child('black').val() === auth.uid && newData.child('result').val() === 'b')) && (newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val())) || (newData.child('status').val() === 'over' && newData.child('reason').val() === 'time' && data.child('ply').val() >= 2 && ((data.child('turn').val() === 'w' && now >= data.child('lastMoveAt').val() + data.child('clock/w').val() - 1000 && newData.child('clock/w').val() === 0 && newData.child('clock/b').val() === data.child('clock/b').val() && (newData.child('result').val() === 'b' || (newData.child('result').val() === 'd' && data.child('black').val() === auth.uid))) || (data.child('turn').val() === 'b' && now >= data.child('lastMoveAt').val() + data.child('clock/b').val() - 1000 && newData.child('clock/b').val() === 0 && newData.child('clock/w').val() === data.child('clock/w').val() && (newData.child('result').val() === 'w' || (newData.child('result').val() === 'd' && data.child('white').val() === auth.uid))))))))))) || (data.child('status').val() !== 'active' && newData.child('status').val() === data.child('status').val() && newData.child('result').val() === data.child('result').val() && newData.child('reason').val() === data.child('reason').val() && newData.child('endBy').val() === data.child('endBy').val() && newData.child('endedAt').val() === data.child('endedAt').val() && newData.child('ply').val() === data.child('ply').val() && newData.child('turn').val() === data.child('turn').val() && newData.child('lastMoveAt').val() === data.child('lastMoveAt').val() && newData.child('clock/w').val() === data.child('clock/w').val() && newData.child('clock/b').val() === data.child('clock/b').val() && newData.child('drawOffer').val() === data.child('drawOffer').val() && ((!data.child('applied/' + data.child('white').val()).exists() || newData.child('applied/' + data.child('white').val()).exists()) && (!data.child('applied/' + data.child('black').val()).exists() || newData.child('applied/' + data.child('black').val()).exists())) && ((!data.child('ack/' + data.child('white').val()).exists() || newData.child('ack/' + data.child('white').val()).exists()) && (!data.child('ack/' + data.child('black').val()).exists() || newData.child('ack/' + data.child('black').val()).exists())) && ((!data.child('disputed/' + data.child('white').val()).exists() || newData.child('disputed/' + data.child('white').val()).exists()) && (!data.child('disputed/' + data.child('black').val()).exists() || newData.child('disputed/' + data.child('black').val()).exists()))))))",
+        "moves": {
+          "$i": {
+            ".validate": "!data.exists() || newData.val() === data.val()"
+          }
+        },
+        "applied": {
+          "$uid": {
+            ".validate": "(data.exists() && newData.val() === data.val() || (!data.exists() && newData.val() === true && (newData.parent().parent().child('white').val() === $uid || newData.parent().parent().child('black').val() === $uid) && newData.parent().parent().parent().parent().child('users/' + $uid + '/last').val() === $gid))"
+          }
+        },
+        "ack": {
+          "$uid": {
+            ".validate": "(data.exists() && newData.val() === data.val() || (!data.exists() && $uid === auth.uid && newData.val() === true && newData.parent().parent().child('status').val() === 'over'))"
+          }
+        },
+        "disputed": {
+          "$uid": {
+            ".validate": "(data.exists() && newData.val() === data.val() || (!data.exists() && $uid === auth.uid && newData.isString() && newData.val().length <= 40 && newData.parent().parent().child('status').val() === 'over'))"
+          }
+        },
+        "rematch": {
+          "$c": {
+            ".validate": "(data.exists() && newData.val() === data.val() || (newData.val() === true && (($c === 'w' && newData.parent().parent().child('white').val() === auth.uid) || ($c === 'b' && newData.parent().parent().child('black').val() === auth.uid))))"
+          }
+        },
+        "next": {
+          ".validate": "(data.exists() && newData.val() === data.val()) || (!data.exists() && newData.isString() && newData.parent().child('status').val() !== 'active' && newData.parent().child('rematch/w').val() === true && newData.parent().child('rematch/b').val() === true)"
+        },
+        "focus": {
+          "$c": {
+            ".validate": "(data.exists() && newData.child('n').val() === data.child('n').val() && newData.child('ms').val() === data.child('ms').val() || ((($c === 'w' && newData.parent().parent().child('white').val() === auth.uid) || ($c === 'b' && newData.parent().parent().child('black').val() === auth.uid)) && newData.child('n').isNumber() && newData.child('ms').isNumber()))"
+          }
+        }
+      }
+    },
+    "fairplay": {
+      "$uid": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        "$gid": {
+          ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !root.child('banned/' + auth.uid).exists()) && !data.exists() && newData.exists() && $uid !== auth.uid",
+          ".validate": "(root.child('games/' + $gid).child('status').val() === 'over' && ((root.child('games/' + $gid).child('white').val() === auth.uid && root.child('games/' + $gid).child('black').val() === $uid) || (root.child('games/' + $gid).child('black').val() === auth.uid && root.child('games/' + $gid).child('white').val() === $uid)) && newData.child('by').val() === auth.uid && newData.child('n').isNumber() && newData.child('match').isNumber() && newData.child('acpl').isNumber() && newData.child('flag').isBoolean())"
+        }
+      }
+    },
+    "reports": {
+      "$rid": {
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !root.child('banned/' + auth.uid).exists()) && !data.exists() && newData.exists()",
+        ".validate": "(newData.child('by').val() === auth.uid && newData.child('against').isString() && newData.child('against').val() !== auth.uid && newData.child('gid').isString() && ((root.child('games/' + newData.child('gid').val()).child('white').val() === auth.uid && root.child('games/' + newData.child('gid').val()).child('black').val() === newData.child('against').val()) || (root.child('games/' + newData.child('gid').val()).child('black').val() === auth.uid && root.child('games/' + newData.child('gid').val()).child('white').val() === newData.child('against').val())) && newData.child('reason').isString() && newData.child('reason').val().length <= 40 && !newData.child('note').exists() || (newData.child('note').isString() && newData.child('note').val().length <= 300))"
+      }
+    },
+    "banned": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "false"
       }
     }
   }

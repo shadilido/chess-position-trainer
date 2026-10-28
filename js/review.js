@@ -188,7 +188,8 @@ export async function analyzeGame(engine, game, onProgress){
       evals.push({ cpW: 0, mate: null, best: null, pv: [], lines: [], terminal: true });
     } else {
       const playerToMove = stm === game.playerColor;
-      const res = await engine.go(fen, { movetime: playerToMove ? 420 : 260, multipv: playerToMove ? 3 : 1, skill: 20 });
+      // online games: 2 lines on the opponent's moves too, for the fair-play check (spotting "only moves")
+      const res = await engine.go(fen, { movetime: playerToMove ? 420 : 260, multipv: playerToMove ? 3 : (game.online ? 2 : 1), skill: 20 });
       const lines = res.lines.map(l => ({ uci: l.pv[0], cpW: scoreToWhiteCp(l.score, stm), mate: l.score.mate, pv: l.pv }));
       const top = lines[0] || { cpW: 0, mate: null, pv: [res.best] };
       evals.push({ cpW: top.cpW, mate: top.mate, best: res.best, pv: top.pv, lines });
@@ -216,6 +217,18 @@ export function buildReview(game, evals){
 
     if (mv.by !== 'p'){
       prevOppLoss = loss;
+      if (game.online){
+        // fair-play data: did the opponent play the engine's first choice, and how much did each move cost?
+        const clipO = v => Math.max(-1500, Math.min(1500, v));
+        const sg = mover === 'w' ? 1 : -1;
+        const sec = before.lines && before.lines[1];
+        const legalN = new Chess(mv.fenBefore).moves().length;
+        entry.fp = {
+          top: before.best === mv.uci,
+          cpLoss: Math.max(0, sg * (clipO(before.cpW) - clipO(after.cpW))),
+          obvious: legalN <= 1 || !!before.terminal || (sec && sg * (clipO(before.cpW) - clipO(sec.cpW)) > 200) || Math.abs(clipO(before.cpW)) > 600
+        };
+      }
       moves.push(entry);
       continue;
     }

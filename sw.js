@@ -1,5 +1,5 @@
 // Offline support: cache the whole app (incl. the Stockfish engine) on first load.
-const VERSION = 'cpt-v2.0.1';
+const VERSION = 'cpt-v2.1.0';
 const ASSETS = [
   './',
   'index.html',

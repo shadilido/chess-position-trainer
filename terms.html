@@ -14,6 +14,7 @@
   .doc a{ color:var(--accent); }
   .doc h1{ font-size:28px; letter-spacing:-.02em; margin:14px 0 4px; }
   .doc h2{ font-size:18px; margin:28px 0 8px; letter-spacing:-.01em; }
+  .doc h3{ font-size:15px; margin:18px 0 6px; }
   .doc .upd{ color:var(--muted); font-size:13px; margin:0 0 18px; }
   .doc ul{ padding-left:20px; } .doc li{ margin:4px 0; }
   .doc .box{ background:var(--surface); box-shadow:inset 0 0 0 1px var(--line); border-radius:10px; padding:12px 14px; }
@@ -38,14 +39,15 @@
   <h2>1. About these terms</h2>
   <p>These terms apply to your use of Position Trainer (“the app”), a free, non-commercial project published on GitHub
   (<a href="https://github.com/shadilido/chess-position-trainer">github.com/shadilido/chess-position-trainer</a>).
-  By using online play (creating an account, signing in as a guest, matchmaking or friend lobbies) you agree to these terms and to the
+  By using online play (creating an account, signing in, matchmaking or friend lobbies) you agree to these terms and to the
   <a href="privacy.html">Privacy Policy</a>. If you don’t agree, you can still use offline training, which needs no account.</p>
 
   <h2>2. Accounts</h2>
   <ul>
     <li>You must be at least 16 years old to create an account, or have permission from a parent or guardian.</li>
     <li>Keep your login details safe. You are responsible for activity on your account.</li>
-    <li>Guest accounts are tied to your browser. If you sign out or clear your browser data, a guest account and its rating can be lost.</li>
+    <li>Online play needs a real account (email and password, or Google). Guest accounts are not available.</li>
+    <li>One account per person. Extra accounts used to play yourself, boost a rating or avoid a suspension will be suspended.</li>
     <li>You can delete your account at any time in the app (Account → Delete account).</li>
   </ul>
 
@@ -59,6 +61,14 @@
     <li>attack, overload, reverse-engineer or try to get unauthorised access to the service or its database.</li>
   </ul>
   <p>We may reset ratings, rename, suspend or delete accounts that break these rules, without notice.</p>
+  <h3>How fair play is checked</h3>
+  <ul>
+    <li>While a live game is running, the app locks its own bot, reviews and analysis (also in other tabs of the same browser).</li>
+    <li>The app records how often each player leaves the game screen during their own turn. Your opponent sees this after the game.</li>
+    <li>After each game, your opponent’s app compares your moves with a chess engine (how often you played its first choice on non-obvious moves, and how much your moves cost on average) and stores the result. Accounts flagged by several different players are marked for opponents and reviewed.</li>
+    <li>Results and ratings are checked by the server and by both players’ apps. A game with an illegal move or a faked result does not count and is reported automatically.</li>
+    <li>You can report an opponent from the result screen. Reports are reviewed by the operator; automated checks alone never lead to a suspension.</li>
+  </ul>
 
   <h2>4. Games and ratings</h2>
   <p>Ratings are an estimate for matchmaking and fun. They are not official chess ratings. Games can end because of connection problems
