@@ -3,9 +3,10 @@ import { Engine } from './engine.js';
 import { Board } from './board.js';
 import { pieceSVG, PIECE_STYLES } from './pieces.js';
 import { store } from './store.js';
-import { play as sfx, unlockAudio, setSoundEnabled } from './sound.js';
+import { play as sfx, unlockAudio, setSoundEnabled, setSoundPack, setVolume, SOUND_PACKS, previewPack } from './sound.js';
 import { loadPositions, pickPosition, PHASES } from './positions.js';
 import { analyzeGame, CLASSES, CLASS_ORDER, TAGS, uciToSan, moveLabel } from './review.js';
+import { initOnline, layoutMatch, renderHomeOnline } from './online-ui.js';
 import { winProb, scoreToWhiteCp, fmtEval, el, debounce } from './util.js';
 import { getBackgroundBlob, saveBackground, clearBackground, applyBackgroundBlob, backgroundUrl } from './background.js';
 
@@ -27,12 +28,15 @@ const THEMES = [
   { id: 'oled', name: 'OLED', bg: '#000000', s: '#161618', a: '#f4b740' }
 ];
 const BOARDS = [
+  { id: 'blue', name: 'Classic Blue', l: '#edf0f5', d: '#7a94c4' },
   { id: 'sage', name: 'Sage', l: '#e9e6d3', d: '#86a17f' },
   { id: 'walnut', name: 'Walnut', l: '#ecd5b0', d: '#a97a51' },
-  { id: 'ocean', name: 'Ocean', l: '#dfe7ee', d: '#6f8fae' },
+  { id: 'ocean', name: 'Ocean', l: '#dfe7ee', d: '#5f8fa8' },
   { id: 'dusk', name: 'Dusk', l: '#ebe2ec', d: '#9a7aa1' },
   { id: 'graphite', name: 'Graphite', l: '#d6d6d2', d: '#7b7c80' },
-  { id: 'coral', name: 'Coral', l: '#f4e6d8', d: '#cf846b' }
+  { id: 'coral', name: 'Coral', l: '#f4e6d8', d: '#cf846b' },
+  { id: 'marble', name: 'Marble', l: '#f1f0ec', d: '#8a8f8c' },
+  { id: 'marble-green', name: 'Green Marble', l: '#eef0ea', d: '#4f7a66' }
 ];
 const FLAME = '<svg viewBox="0 0 24 24"><path d="M12 2c1 3.5 5 6 5 11a5 5 0 0 1-10 0c0-2.3 1-4 2.5-5.3.2 1.6 1 2.8 2.3 3.3C11 8.7 11.3 5.2 12 2Z"/></svg>';
 const MAX_PLAYER_MOVES = 80;
@@ -49,6 +53,7 @@ let playBoard, reviewBoard, heroBoard;
 let G = null;          // active game
 let R = null;          // review state
 let deferredInstall = null;
+const extraBoards = [];
 
 // ================= Boot =================
 async function boot(){
@@ -57,10 +62,17 @@ async function boot(){
   playBoard = new Board($('#play-board'), { onMove: onPlayerMove, getLegal: sq => legalFrom(sq) });
   reviewBoard = new Board($('#review-board'));
   reviewBoard.root.classList.add('rv');
-  heroBoard = new Board($('#hero-board'));
+  heroBoard = new Board($('#hero-board'), { draw: false });
   heroBoard.applySettings({ coords: false, anim: false, pieces: settings.pieces });
   applyBoardSettings();
   bindNav();
+  initOnline({
+    show, toast, layout,
+    settings: () => settings,
+    registerBoard: b => { extraBoards.push(b); applyBoardSettings(); },
+    addHistory: rec => { history = history.filter(h => h.id !== rec.id); history.unshift(rec); store.saveHistory(history); },
+    openReview: (rec, from) => openReview(rec, from)
+  });
   renderHome();
   layout();
   window.addEventListener('resize', debounce(layout, 60));
@@ -95,6 +107,8 @@ function applySettings(){
   const t = THEMES.find(t => t.id === settings.theme);
   $('meta[name="theme-color"]').setAttribute('content', t ? t.bg : '#141519');
   setSoundEnabled(settings.sound);
+  setSoundPack(settings.soundPack);
+  setVolume(settings.volume == null ? 0.8 : settings.volume);
   h.style.setProperty('--bg-dim', String(settings.bgDim));
   h.classList.toggle('bg-blur', !!settings.bgBlur);
 }
@@ -105,10 +119,11 @@ async function loadBackground(){
 }
 
 function applyBoardSettings(){
-  const s = { coords: settings.coords, legal: settings.legal, anim: settings.anim, pieces: settings.pieces };
+  const s = { coords: settings.coords, legal: settings.legal, anim: settings.anim, pieces: settings.pieces, animSpeed: settings.animSpeed };
   playBoard.applySettings(s);
   reviewBoard.applySettings(s);
   heroBoard.applySettings({ pieces: settings.pieces, coords: false, anim: false });
+  extraBoards.forEach(b => b.applySettings(s));
 }
 function saveSettings(){ store.saveSettings(settings); applySettings(); applyBoardSettings(); layout(); }
 
@@ -130,7 +145,7 @@ function bindNav(){
   $('#btn-play').addEventListener('click', onPlay);
   $('#btn-next').addEventListener('click', () => { hideSheet(); newChallenge(); });
   $('#btn-review').addEventListener('click', () => { const rec = history.find(h => h.id === G?.recId); if (rec) openReview(rec, 'play'); });
-  $('#review-back').addEventListener('click', () => show(R && R.from === 'stats' ? 'stats' : (G && G.over ? 'play' : 'home')));
+  $('#review-back').addEventListener('click', () => show(R && R.from === 'stats' ? 'stats' : R && R.from === 'match' ? 'match' : (G && G.over ? 'play' : 'home')));
   $('#review-next').addEventListener('click', () => { show('play'); if (!G || G.over){ hideSheet(); newChallenge(); } });
   $$('.nav-btn').forEach(b => b.addEventListener('click', () => reviewNav(b.dataset.nav)));
   $('#mode-seg').addEventListener('click', e => {
@@ -174,6 +189,7 @@ function layout(){
     size = Math.max(160, Math.floor(size / 8) * 8);
     scr.style.setProperty('--bs', size + 'px');
   }
+  if (current === 'match') layoutMatch();
 }
 
 // ================= Home =================
@@ -193,6 +209,7 @@ function renderHome(){
   $('#level-name').textContent = `${L.name} · ${L.elo}`;
   const act = store.active();
   $('#play-label').textContent = (G && !G.over) || act ? 'Continue challenge' : 'Play';
+  try { renderHomeOnline(); } catch(_){}
   const rw = $('#recent-wrap'), rl = $('#recent');
   rw.hidden = !history.length;
   rl.innerHTML = '';
@@ -220,6 +237,7 @@ function renderInstallCard(){
 async function onPlay(){
   unlockAudio(); sfx('tap');
   show('play');
+  maybeArrowTip();
   if (G && !G.over){ resumeView(); return; }
   if (G && G.over){ resumeView(); return; }
   const act = store.active();
@@ -299,6 +317,14 @@ function saveActive(){
     startCpW: G.startCpW, targetP: G.targetP, evalW: G.evalW,
     moves: G.moves.map(m => ({ uci: m.uci, by: m.by }))
   });
+}
+
+function maybeArrowTip(){
+  try {
+    if (!window.matchMedia('(pointer:fine)').matches || localStorage.getItem('cpt.tipArrows')) return;
+    localStorage.setItem('cpt.tipArrows', '1');
+  } catch(_) { return; }
+  setTimeout(() => toast('Tip: right-click + drag on the board to draw arrows'), 900);
 }
 
 function resumeView(){
@@ -665,12 +691,12 @@ function renderCoach(){
   if (ply === 0){
     const counts = rv.counts;
     const resCls = rec.result === 'success' ? 'win' : rec.result === 'draw' ? 'draw' : 'lose';
-    const resTxt = rec.result === 'success' ? (rec.reason === 'mate' ? 'Won by mate' : 'Challenge complete') : rec.result === 'draw' ? 'Draw' : 'Checkmated';
+    const resTxt = rec.online ? (rec.result === 'success' ? 'Won' : rec.result === 'draw' ? 'Draw' : 'Lost') : rec.result === 'success' ? (rec.reason === 'mate' ? 'Won by mate' : 'Challenge complete') : rec.result === 'draw' ? 'Draw' : 'Checkmated';
     const keys = rv.turning.map(i => {
       const m = rv.moves[i];
       const d = winProb(rv.evals[i + 1].cpW) - winProb(rv.evals[i].cpW);
       const forMe = rec.playerColor === 'w' ? d : -d;
-      return `<button data-ply="${i + 1}">${m.cls ? badge(m.cls) : '<span class="cbadge" style="background:var(--faint)">•</span>'}<span>${moveLabel(rec, i)} ${m.san}${m.by === 'b' ? ' <small style="color:var(--muted)">(bot)</small>' : ''}</span><span class="d" style="color:${forMe > 0 ? 'var(--ok)' : 'var(--bad)'}">${forMe > 0 ? '▲' : '▼'} ${fmtEval(rv.evals[i + 1].cpW)}</span></button>`;
+      return `<button data-ply="${i + 1}">${m.cls ? badge(m.cls) : '<span class="cbadge" style="background:var(--faint)">•</span>'}<span>${moveLabel(rec, i)} ${m.san}${m.by === 'b' ? ` <small style="color:var(--muted)">(${rec.online ? 'opponent' : 'bot'})</small>` : ''}</span><span class="d" style="color:${forMe > 0 ? 'var(--ok)' : 'var(--bad)'}">${forMe > 0 ? '▲' : '▼'} ${fmtEval(rv.evals[i + 1].cpW)}</span></button>`;
     }).join('');
     box.innerHTML = `
       <div class="sum-top">
@@ -691,18 +717,19 @@ function renderCoach(){
   const evAfter = fmtEval(rv.evals[ply].cpW);
   if (m.by === 'b'){
     const dP = (rec.playerColor === 'w' ? 1 : -1) * (rv.evals[ply].cpW - rv.evals[ply - 1].cpW);
-    let note = 'The bot made its move.';
+    const who = rec.online ? 'Your opponent' : 'The bot';
     const lossForBot = m.loss;
-    if (lossForBot >= 0.2) note = 'The bot blundered here — look for a way to punish it!';
-    else if (lossForBot >= 0.1) note = 'The bot made a mistake — there was a chance for you here.';
-    else if (lossForBot >= 0.05) note = 'A slightly inaccurate move by the bot.';
-    else note = 'A solid reply by the bot.';
+    let note;
+    if (lossForBot >= 0.2) note = `${who} blundered here — look for a way to punish it!`;
+    else if (lossForBot >= 0.1) note = `${who} made a mistake — there was a chance for you here.`;
+    else if (lossForBot >= 0.05) note = `A slightly inaccurate move by ${rec.online ? 'your opponent' : 'the bot'}.`;
+    else note = `A solid reply by ${rec.online ? 'your opponent' : 'the bot'}.`;
     const nxt = rv.moves[ply];
     let nextHint = '';
     if (nxt && nxt.by === 'p' && nxt.bestSan) nextHint = `<div class="coach-cmp"><button class="cmp-show" id="hint-btn">Show best reply</button></div>`;
     box.innerHTML = `
       <div class="coach-head"><span class="cbadge" style="background:var(--faint)">${rec.playerColor === 'w' ? 'B' : 'W'}</span>
-        <div class="coach-title">Bot played ${m.san}</div><span class="coach-eval">${evAfter}</span></div>
+        <div class="coach-title">${rec.online ? escHtml(rec.opp || 'Opponent') : 'Bot'} played ${m.san}</div><span class="coach-eval">${evAfter}</span></div>
       <div class="coach-text">${note}</div>${nextHint}`;
     const hb = $('#hint-btn');
     if (hb) hb.onclick = () => {
@@ -868,14 +895,14 @@ function renderStats(){
 function histRow(h){
   const b = el('button', 'hist');
   const resCls = h.result === 'success' ? 'win' : h.result === 'draw' ? 'draw' : 'lose';
-  const resTxt = h.result === 'success' ? 'Solved' : h.result === 'draw' ? 'Draw' : 'Lost';
+  const resTxt = h.result === 'success' ? (h.online ? 'Won' : 'Solved') : h.result === 'draw' ? 'Draw' : 'Lost';
   const mist = h.review ? h.review.moves.filter(m => m.by === 'p' && ['mistake','blunder','miss'].includes(m.cls)).length : null;
   const d = new Date(h.date);
   b.innerHTML = `<div class="mini"></div>
     <div class="info"><div class="a">${PHASES[h.phase].label} <span class="res ${resCls}">${resTxt}</span></div>
-    <div class="b">${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${LEVELS[h.level].name} · ${h.moves.filter(m => m.by === 'p').length} moves${h.review && h.review.accuracy != null ? ` · ${Math.round(h.review.accuracy)}% acc` : ''}${mist ? ` · ${mist} mistake${mist > 1 ? 's' : ''}` : ''}</div></div>
+    <div class="b">${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${h.online ? 'vs ' + escHtml(h.opp || 'opponent') : LEVELS[h.level].name} · ${h.moves.filter(m => m.by === 'p').length} moves${h.review && h.review.accuracy != null ? ` · ${Math.round(h.review.accuracy)}% acc` : ''}${mist ? ` · ${mist} mistake${mist > 1 ? 's' : ''}` : ''}</div></div>
     <span class="chev"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>`;
-  const mini = new Board(b.querySelector('.mini'));
+  const mini = new Board(b.querySelector('.mini'), { draw: false });
   mini.applySettings({ coords: false, anim: false, legal: false, pieces: settings.pieces });
   mini.setOrientation(h.playerColor);
   mini.setPosition(new Chess(h.startFen), null, false);
@@ -902,7 +929,7 @@ function renderSettings(){
   body.innerHTML = `
     <div class="set-group"><h3>Theme</h3>
       <div class="themes">${THEMES.map(t => `<button class="theme-opt ${settings.theme === t.id ? 'on' : ''}" data-theme="${t.id}">
-        <span class="sw" style="background:${t.bg}"><i style="top:10px;background:${t.s}"></i><i style="top:22px;right:30px;background:${t.a}"></i></span>${t.name}</button>`).join('')}</div>
+        <span class="sw" style="background:${t.bg}"><i style="top:10px;background:${t.s}"></i><i style="top:22px;right:30px;background:var(--accent)"></i></span>${t.name}</button>`).join('')}</div>
     </div>
     <div class="set-group"><h3>Background</h3>
       <div class="bg-card">
@@ -917,11 +944,11 @@ function renderSettings(){
         <button class="tog ${settings.bgBlur ? 'on' : ''}" data-tog="bgBlur" style="padding:0;min-height:40px;border:0"><span>Blur photo</span><span class="switch"></span></button>
       </div>
     </div>
-    <div class="set-group"><h3>Board</h3>
+    <div class="set-group"><h3>Board <span style="text-transform:none;letter-spacing:0;font-weight:500">· the app's colours follow your board</span></h3>
       <div class="boards">${BOARDS.map(b => `<button class="board-opt ${settings.boardTheme === b.id ? 'on' : ''}" data-board="${b.id}">
         <span class="bsw">${[0,1,2,3,4,5,6,7].map(i => `<i style="background:${(i + Math.floor(i / 4)) % 2 ? b.d : b.l}"></i>`).join('')}</span>${b.name}</button>`).join('')}</div>
     </div>
-    <div class="set-group"><h3>Pieces</h3>
+    <div class="set-group"><h3>Pieces <span style="text-transform:none;letter-spacing:0;font-weight:500">· ${PIECE_STYLES.length} sets</span></h3>
       <div class="pieces-opts">${PIECE_STYLES.map(p => `<button class="piece-opt ${settings.pieces === p.id ? 'on' : ''}" data-pieces="${p.id}">
         <span class="pv"><span>${pieceSVG('n', 'w', p.id)}</span><span>${pieceSVG('q', 'b', p.id)}</span><span>${pieceSVG('k', 'w', p.id)}</span></span>${p.name}</button>`).join('')}</div>
     </div>
@@ -929,14 +956,33 @@ function renderSettings(){
       <div class="toggles">
         ${tog('sound', 'Sound effects')}
         ${tog('anim', 'Move animations')}
+        <div class="set-row" ${settings.anim ? '' : 'style="opacity:.45;pointer-events:none"'}><span>Animation speed</span><div class="seg small" id="speed-seg">${['fast','normal','slow'].map(v => `<button data-speed="${v}" class="${settings.animSpeed === v ? 'on' : ''}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div></div>
         ${tog('legal', 'Legal-move highlights', 'Dots on squares the selected piece can reach')}
         ${tog('coords', 'Board coordinates')}
         ${tog('evalBar', 'Evaluation bar')}
       </div>
     </div>
+    <div class="set-group"><h3>Sound pack <span style="text-transform:none;letter-spacing:0;font-weight:500">· tap to hear it</span></h3>
+      <div class="packs">${SOUND_PACKS.map(p => `<button class="pack-opt ${settings.soundPack === p.id ? 'on' : ''}" data-pack="${p.id}">
+        <span class="pk-play"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></span>
+        <span class="pk-txt"><b>${p.name}</b><small>${p.desc}</small></span></button>`).join('')}</div>
+      <div class="bg-card" style="margin-top:8px;padding:10px 14px">
+        <div class="bg-slider"><span>Volume</span><input type="range" min="0" max="100" step="5" id="vol" value="${Math.round((settings.volume == null ? 0.8 : settings.volume) * 100)}"><span class="v" id="vol-v">${Math.round((settings.volume == null ? 0.8 : settings.volume) * 100)}%</span></div>
+      </div>
+    </div>
+    <div class="set-group"><h3>Board controls</h3>
+      <div class="card about">
+        <b>Move:</b> tap a piece then a square, or drag it.<br>
+        <b>Arrows (PC):</b> right-click and drag between squares. Right-click a square to circle it. Left-click the board to clear.<br>
+        <b>Colours:</b> hold <span class="kbd">Shift</span><i class="dot-c" style="background:#e5484d"></i>
+        <span class="kbd">Ctrl</span><i class="dot-c" style="background:#46a758"></i>
+        <span class="kbd">Alt</span><i class="dot-c" style="background:#3e8eed"></i> while drawing (default <i class="dot-c" style="background:#f5a524;margin-left:2px"></i>).
+      </div>
+    </div>
     <div class="set-group"><h3>About</h3>
       <div class="card about">
         <b>Position Trainer</b> — plays and analyses with <b>Stockfish 18</b> running fully on your device (works offline once loaded).
+        <br><br><a href="terms.html">Terms &amp; Conditions</a> · <a href="privacy.html">Privacy Policy</a>
         <br><br>${isStandalone() ? 'Installed as an app ✓' : isIOS() ? 'Tip: in Safari tap <b>Share → Add to Home Screen</b> to install.' : 'Tip: in Chrome or Edge use the <b>Install</b> icon in the address bar to install on your PC.'}
       </div>
     </div>`;
@@ -951,6 +997,9 @@ function renderSettings(){
     renderSettings();
   };
   $('#bg-clear').onclick = async () => { await clearBackground(); renderSettings(); };
+  const vol = $('#vol');
+  vol.oninput = () => { settings.volume = +vol.value / 100; $('#vol-v').textContent = vol.value + '%'; setVolume(settings.volume); };
+  vol.onchange = () => { store.saveSettings(settings); sfx('move'); };
   const dim = $('#bg-dim');
   dim.oninput = () => {
     settings.bgDim = +dim.value / 100;
@@ -965,6 +1014,8 @@ function renderSettings(){
     else if (b.dataset.board) settings.boardTheme = b.dataset.board;
     else if (b.dataset.pieces) settings.pieces = b.dataset.pieces;
     else if (b.dataset.tog) settings[b.dataset.tog] = !settings[b.dataset.tog];
+    else if (b.dataset.speed) settings.animSpeed = b.dataset.speed;
+    else if (b.dataset.pack){ settings.soundPack = b.dataset.pack; if (!settings.sound) settings.sound = true; setSoundPack(settings.soundPack); previewPack(settings.soundPack); }
     else return;
     saveSettings();
     renderSettings();
@@ -973,6 +1024,7 @@ function renderSettings(){
 }
 
 // ================= Misc =================
+function escHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function toast(msg){
   const t = el('div', 'toast', msg);
   document.body.appendChild(t);

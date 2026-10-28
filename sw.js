@@ -1,11 +1,18 @@
 // Offline support: cache the whole app (incl. the Stockfish engine) on first load.
-const VERSION = 'cpt-v1.0.0';
+const VERSION = 'cpt-v2.0.0';
 const ASSETS = [
   './',
   'index.html',
   'manifest.webmanifest',
   'css/app.css',
+  'css/marble.svg',
   'js/app.js',
+  'js/online.js',
+  'js/online-ui.js',
+  'js/firebase-config.js',
+  'js/vendor/firebase.js',
+  'privacy.html',
+  'terms.html',
   'js/background.js',
   'js/board.js',
   'js/engine.js',

@@ -7,7 +7,8 @@ export const PHASES = {
   r: { label: 'Random',     short: 'Random' },
   o: { label: 'Opening',    short: 'Opening' },
   m: { label: 'Middlegame', short: 'Middlegame' },
-  e: { label: 'Endgame',    short: 'Endgame' }
+  e: { label: 'Endgame',    short: 'Endgame' },
+  online: { label: 'Online', short: 'Online' }
 };
 
 export async function loadPositions(){

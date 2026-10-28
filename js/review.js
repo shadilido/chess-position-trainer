@@ -392,7 +392,10 @@ function summarize(game, evals, moves, counts, turning, accuracy){
   const startW = evals[0].cpW, endW = evals[evals.length - 1].cpW;
   const startP = pc === 'w' ? startW : -startW, endP = pc === 'w' ? endW : -endW;
   const out = [];
-  if (game.result === 'success'){
+  if (game.online){
+    const how = { mate: 'by checkmate', resign: 'by resignation', time: 'on time', abandon: 'because your opponent left', agreement: 'by agreement', stalemate: 'by stalemate', repetition: 'by repetition', insufficient: 'by insufficient material', fifty: 'by the 50-move rule' }[game.reason] || '';
+    out.push(game.result === 'success' ? `You beat ${game.opp || 'your opponent'} ${how}.` : game.result === 'draw' ? `Drawn ${how}.` : `${game.opp || 'Your opponent'} won ${how}.`);
+  } else if (game.result === 'success'){
     out.push(game.reason === 'mate' ? 'You delivered checkmate — challenge complete!' : `You improved the position from ${fmtSigned(startP)} to ${fmtSigned(endP)} — challenge complete!`);
   } else if (game.result === 'draw'){
     out.push('The game ended in a draw before you could improve the position.');

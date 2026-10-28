@@ -12,10 +12,13 @@ function write(k, v){
 
 export const DEFAULT_SETTINGS = {
   theme: 'dark',          // dark | light | midnight | oled
-  boardTheme: 'sage',
-  pieces: 'prism',
+  boardTheme: 'blue',
+  pieces: 'staunton',
   sound: true,
+  soundPack: 'wood',      // one of 15 synthesized packs
+  volume: 0.8,
   anim: true,
+  animSpeed: 'normal',    // fast | normal | slow
   legal: true,
   coords: true,
   evalBar: true,
@@ -26,7 +29,13 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const store = {
-  settings(){ return Object.assign({}, DEFAULT_SETTINGS, read('settings', {})); },
+  settings(){
+    const s = Object.assign({}, DEFAULT_SETTINGS, read('settings', {}));
+    // v2 look: classic pieces + blue board for everyone once
+    if (!s.v2){ s.pieces = 'staunton'; s.boardTheme = 'blue'; s.v2 = true; write('settings', s); }
+    if (s.pieces === 'glyph') s.pieces = 'staunton';
+    return s;
+  },
   saveSettings(s){ write('settings', s); },
 
   stats(){

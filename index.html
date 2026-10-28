@@ -26,9 +26,12 @@
         <span class="brand-mark"><svg viewBox="0 0 45 45"><path d="M14 35.5 C14 30 17 27.5 19.5 25.5 L18 24.2 C15 25.2 12 26.2 10.2 25 C8.6 24 8.6 21.8 10 20.6 L16.5 13.5 C17.5 11 19 9.5 20.5 8.8 L21.5 5.5 L24.5 8.5 C29.5 10 33 14.5 33.5 21 C34 27 32.5 31 32 35.5 Z" fill="currentColor"/><rect x="10" y="35.5" width="25" height="4.5" rx="2.2" fill="currentColor"/></svg></span>
         <span class="brand-name">Position<b>Trainer</b></span>
       </div>
+      <div class="top-actions">
+      <button class="icon-btn acct" id="btn-account" aria-label="Account"></button>
       <button class="icon-btn" data-go="settings" aria-label="Settings">
         <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
       </button>
+      </div>
     </header>
     <div class="home-body">
       <div class="hero">
@@ -40,6 +43,15 @@
       </div>
 
       <button class="stat-strip" data-go="stats" id="home-stats"></button>
+
+      <div class="online-card">
+        <div class="oc-head"><span class="oc-title">Play online</span><span class="oc-sub" id="oc-sub">1v1 against real players</span></div>
+        <div class="oc-btns">
+          <button class="oc-btn" id="btn-find"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3Z"/></svg><span>Find match</span></button>
+          <button class="oc-btn" id="btn-friend"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.8"/><path d="M16.5 14.2c3 .2 5 2.3 5 5.3"/></svg><span>Play a friend</span></button>
+        </div>
+        <button class="oc-return" id="btn-return" hidden>Return to your game ▸</button>
+      </div>
 
       <div class="field">
         <div class="field-label">Position type</div>
@@ -167,6 +179,92 @@
       <span class="icon-btn ghost"></span>
     </header>
     <div class="scroll" id="settings-body"></div>
+  </section>
+
+
+  <!-- AUTH -->
+  <section id="scr-auth" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" id="auth-back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="tb-center"><span class="tb-title">Account</span></div>
+      <span class="icon-btn ghost"></span>
+    </header>
+    <div class="scroll auth-wrap">
+      <div class="auth-hero">
+        <span class="brand-mark big"><svg viewBox="0 0 45 45"><path d="M14 35.5 C14 30 17 27.5 19.5 25.5 L18 24.2 C15 25.2 12 26.2 10.2 25 C8.6 24 8.6 21.8 10 20.6 L16.5 13.5 C17.5 11 19 9.5 20.5 8.8 L21.5 5.5 L24.5 8.5 C29.5 10 33 14.5 33.5 21 C34 27 32.5 31 32 35.5 Z" fill="currentColor"/><rect x="10" y="35.5" width="25" height="4.5" rx="2.2" fill="currentColor"/></svg></span>
+        <h2 id="auth-title">Sign in to play online</h2>
+        <p>Play real people, keep your rating and your game history.</p>
+      </div>
+      <div class="seg seg2" id="auth-tabs"><button data-t="in" class="on">Sign in</button><button data-t="up">Create account</button></div>
+      <form id="auth-form" class="fld-col" novalidate>
+        <label class="fld" id="fld-name" hidden><span>Display name</span><input id="au-name" maxlength="20" autocomplete="nickname" placeholder="What others will see"></label>
+        <label class="fld"><span>Email</span><input id="au-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></label>
+        <label class="fld"><span>Password</span><input id="au-pass" type="password" autocomplete="current-password" placeholder="At least 6 characters"></label>
+        <label class="chk" id="fld-agree" hidden><input type="checkbox" id="au-agree"> <span>I agree to the <a href="terms.html" target="_blank">Terms &amp; Conditions</a> and the <a href="privacy.html" target="_blank">Privacy Policy</a></span></label>
+        <div class="au-err" id="au-err"></div>
+        <button class="btn pri wide" id="au-submit" type="submit">Sign in</button>
+        <button class="link center" type="button" id="au-forgot">Forgot password?</button>
+      </form>
+      <div class="or"><span>or</span></div>
+      <button class="btn sec wide gbtn" id="au-google"><svg viewBox="0 0 24 24"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14Z"/><path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10c.8-2.3 3-4.1 5.6-4.1Z"/></svg><span>Continue with Google</span></button>
+      <button class="btn sec wide" id="au-guest">Play as guest</button>
+      <p class="legal">By continuing you agree to the <a href="terms.html">Terms &amp; Conditions</a> and confirm you have read the <a href="privacy.html">Privacy Policy</a>.</p>
+    </div>
+  </section>
+
+  <!-- ACCOUNT -->
+  <section id="scr-account" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-go="home" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="tb-center"><span class="tb-title">Your account</span></div>
+      <span class="icon-btn ghost"></span>
+    </header>
+    <div class="scroll" id="account-body"></div>
+  </section>
+
+  <!-- ONLINE HUB -->
+  <section id="scr-online" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" id="online-back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="tb-center"><span class="tb-title">Play online</span></div>
+      <span class="icon-btn ghost"></span>
+    </header>
+    <div class="scroll" id="online-body"></div>
+  </section>
+
+  <!-- LIVE MATCH -->
+  <section id="scr-match" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" id="match-back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="tb-center"><span class="chip" id="match-chip">Online</span><span class="tb-sub" id="match-sub"></span></div>
+      <span class="icon-btn ghost"></span>
+    </header>
+    <div class="match-main" id="match-main">
+      <div class="pbar" id="pbar-top"><span class="pb-av"></span><span class="pb-info"><b class="pb-name"></b><span class="pb-rating"></span></span><span class="pb-clock">5:00</span></div>
+      <div class="arena" id="match-arena"><div class="board-host" id="match-board"></div></div>
+      <div class="pbar" id="pbar-bot"><span class="pb-av"></span><span class="pb-info"><b class="pb-name"></b><span class="pb-rating"></span></span><span class="pb-clock">5:00</span></div>
+      <div class="match-note" id="match-note" hidden></div>
+      <div class="match-actions">
+        <button class="act" id="act-draw"></button>
+        <button class="act" id="act-resign"></button>
+      </div>
+      <div class="movestrip" id="match-moves"></div>
+    </div>
+    <div class="sheet" id="match-sheet" hidden>
+      <div class="sheet-card">
+        <div class="res-head">
+          <div class="res-icon" id="ms-icon"></div>
+          <div><div class="res-title" id="ms-title"></div><div class="res-sub" id="ms-sub"></div></div>
+        </div>
+        <div class="ms-rating" id="ms-rating"></div>
+        <div class="res-btns three">
+          <button class="btn sec" id="ms-review">Review</button>
+          <button class="btn sec" id="ms-new">New game</button>
+          <button class="btn pri" id="ms-rematch">Rematch</button>
+        </div>
+      </div>
+    </div>
+    <div class="promo" id="mpromo" hidden><div class="promo-card" id="mpromo-card"></div></div>
   </section>
 
   <div class="boot" id="boot"><div class="spinner"></div><div>Loading engine…</div></div>

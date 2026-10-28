@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-board="blue">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy Policy · Position Trainer</title>
+<meta name="theme-color" content="#141519">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  html, body{ overflow:auto; }
+  body{ -webkit-user-select:text; user-select:text; }
+  .doc{ max-width:720px; margin:0 auto; padding:calc(16px + env(safe-area-inset-top)) 18px 60px; line-height:1.6; font-size:15.5px; }
+  .doc a{ color:var(--accent); }
+  .doc h1{ font-size:28px; letter-spacing:-.02em; margin:14px 0 4px; }
+  .doc h2{ font-size:18px; margin:28px 0 8px; letter-spacing:-.01em; }
+  .doc .upd{ color:var(--muted); font-size:13px; margin:0 0 18px; }
+  .doc ul{ padding-left:20px; } .doc li{ margin:4px 0; }
+  .doc .box{ background:var(--surface); box-shadow:inset 0 0 0 1px var(--line); border-radius:10px; padding:12px 14px; }
+  .back{ display:inline-flex; align-items:center; gap:6px; font-weight:700; color:var(--text) !important; text-decoration:none; }
+  .back svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+  table{ border-collapse:collapse; width:100%; font-size:14px; } td, th{ text-align:left; padding:8px; border-top:1px solid var(--line); vertical-align:top; }
+</style>
+<script>
+  try { const s = JSON.parse(localStorage.getItem('cpt.v1.settings') || '{}'); if (s.theme) document.documentElement.dataset.theme = s.theme; if (s.boardTheme) document.documentElement.dataset.board = s.boardTheme; } catch(_){}
+</script>
+</head>
+<body>
+<main class="doc">
+  <a class="back" href="./"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Back to the app</a>
+  <h1>Privacy Policy</h1>
+  <p class="upd">Last updated: 28 October 2026</p>
+
+  <div class="box">
+    <b>Short version:</b> Training against the bot happens entirely on your device, and nothing about it is sent anywhere.
+    Data is only stored online if you use <b>online play</b> (sign-in, matchmaking, friend lobbies): your account, display name, rating and online games.
+    There are no ads, no tracking and no selling of data. You can delete your account at any time inside the app.
+  </div>
+
+  <h2>1. Who is responsible</h2>
+  <p>Position Trainer (“the app”) is a free, non-commercial hobby project published by its developer on GitHub
+  (<a href="https://github.com/shadilido/chess-position-trainer">github.com/shadilido/chess-position-trainer</a>), referred to here as “we”.
+  For any privacy question or request, open an issue on that GitHub page, or use the contact details given there.</p>
+
+  <h2>2. What happens on your device only</h2>
+  <p>The chess engine (Stockfish), the training positions, your training statistics, game history, settings and any background photo you choose are stored
+  <b>only in your browser’s local storage on your device</b>. They are never uploaded. Your background photo never leaves your device.
+  You can remove this data by using “Reset statistics & history” in Settings or by clearing the website data in your browser.</p>
+
+  <h2>3. Data we process when you use online play</h2>
+  <table>
+    <tr><th>Data</th><th>Why</th></tr>
+    <tr><td>Email address and a securely hashed password (email accounts), or your Google account ID, name and email (Google sign-in), or a random anonymous ID (guest accounts)</td><td>To create your account and let you sign in. Passwords are handled by Firebase Authentication; we never see them.</td></tr>
+    <tr><td>Display name</td><td>Shown to your opponents and in lobbies.</td></tr>
+    <tr><td>Rating and game counts (wins, draws, losses)</td><td>Fair matchmaking and your profile.</td></tr>
+    <tr><td>Online games: moves, starting position, time control, clocks, result, both players’ display names and ratings</td><td>To run the live game and show the result to both players.</td></tr>
+    <tr><td>Matchmaking and lobby entries (your user ID, display name, rating, a lobby code, timestamps)</td><td>To pair you with an opponent or a friend. These entries are temporary and removed when the match starts or you cancel.</td></tr>
+    <tr><td>Online status (whether you are connected)</td><td>To tell your opponent if you disconnect during a game.</td></tr>
+    <tr><td>Technical data such as your IP address and device/browser information</td><td>Processed automatically by Google Firebase to deliver the service and protect it from abuse.</td></tr>
+  </table>
+  <p>Display names, ratings and online games can be seen by other signed-in players (for example, your opponents). Don’t use your real name as a display name if you don’t want it to be visible.</p>
+
+  <h2>4. Legal basis (EU / EEA users)</h2>
+  <ul>
+    <li><b>Contract (Art. 6(1)(b) GDPR):</b> providing your account and online games, which you request.</li>
+    <li><b>Legitimate interests (Art. 6(1)(f) GDPR):</b> keeping the service secure and preventing abuse.</li>
+  </ul>
+
+  <h2>5. Service providers</h2>
+  <p>Online play uses <b>Google Firebase</b> (Firebase Authentication and Firebase Realtime Database), provided by Google Ireland Ltd. / Google LLC, acting as our processor.
+  Data may be processed on servers outside the EU, including in the USA. Google relies on the EU–US Data Privacy Framework and Standard Contractual Clauses.
+  See <a href="https://firebase.google.com/support/privacy">firebase.google.com/support/privacy</a>.
+  The website itself is hosted on <b>GitHub Pages</b> (GitHub, Inc.), which receives your IP address when you load the site; see GitHub’s privacy statement.</p>
+
+  <h2>6. Cookies and local storage</h2>
+  <p>We use no advertising or analytics cookies. The app uses your browser’s local storage and IndexedDB only for things that are strictly necessary:
+  your settings, training data, offline files and, if you sign in, your login session (stored by Firebase Authentication).</p>
+
+  <h2>7. How long we keep data</h2>
+  <ul>
+    <li>Account and profile: until you delete your account.</li>
+    <li>Matchmaking and lobby entries: removed when a match starts or is cancelled (stale entries are cleared automatically).</li>
+    <li>Online game records: kept so both players can see results; they may remain after you delete your account, showing only the display name you used then. Ask us via GitHub if you want them removed.</li>
+  </ul>
+
+  <h2>8. Your rights</h2>
+  <p>You can <b>delete your account at any time</b> in the app (Account → Delete account), which removes your profile and sign-in.
+  You can also change your display name there. If you are in the EU/EEA or UK you have the right to access, correct, delete, restrict or object to processing of your data and to data portability,
+  and the right to complain to a data protection authority. To exercise these rights, contact us via GitHub as described in section 1.</p>
+
+  <h2>9. Children</h2>
+  <p>Online play is not intended for children under 16 without the consent of a parent or guardian. If you believe a child has created an account without consent, contact us and we will delete it.
+  Offline training doesn’t require an account and stores nothing online.</p>
+
+  <h2>10. Security</h2>
+  <p>Connections are encrypted (HTTPS). Database access is restricted by security rules so that players can only change their own profile and the games they play in.
+  No system is perfectly secure, so please use a unique password.</p>
+
+  <h2>11. Changes</h2>
+  <p>We may update this policy when the app changes. The date at the top shows the latest version. Significant changes will be mentioned in the app or on the GitHub page.</p>
+</main>
+</body>
+</html>
