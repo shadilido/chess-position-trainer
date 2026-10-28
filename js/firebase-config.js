@@ -1,13 +1,10 @@
 // Firebase settings for online play (login, matchmaking, friend lobbies).
-// Paste the config object from: Firebase console → Project settings → Your apps → Web app → "SDK setup and configuration" (Config).
-// These values are public by design (they identify the project); access is controlled by the database rules in database.rules.json.
-export const firebaseConfig = null;
-/* Example:
+// From: Firebase console → Project settings → Your apps → "Position Trainer web".
+// These values are public by design (they only identify the project); access is controlled by database.rules.json.
 export const firebaseConfig = {
-  apiKey: "AIza...",
-  authDomain: "your-project.firebaseapp.com",
-  databaseURL: "https://your-project-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "your-project",
-  appId: "1:123:web:abc"
+  apiKey: "AIzaSyDrcuHSzE5b6HjciQIj86bz3eCZoNcIrcU",
+  authDomain: "chess-position-trainer.firebaseapp.com",
+  databaseURL: "https://chess-position-trainer-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "chess-position-trainer",
+  appId: "1:791364062353:web:42de7cae20f0258a7d0330"
 };
-*/
